@@ -5,7 +5,7 @@
     "n_gpu": 2,
     "num_images_all": 10582,
     "dataset": "voc",
-    "label_subcls": "./saved/voc_1over32_baseline/label_subcls_balanced_kmeans",
+    "label_subcls": "./saved/voc_1over32_baseline/label_subcls_normal_kmeans",
     "data_dir": "./datasets/voc",
     "datalist": 0,
     "diff_lrs": true,

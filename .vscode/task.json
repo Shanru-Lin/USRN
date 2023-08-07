@@ -1,0 +1,16 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "Run Regularized K-Means",
+        "type": "shell",
+        "command": "regularized-k-means/build/regularized-k-means",
+        "args": [
+          "hard",
+          // ... add your other arguments here
+        ],
+        "problemMatcher": []
+      }
+    ]
+  }
+  

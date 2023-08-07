@@ -22,7 +22,10 @@ import torch.distributed as dist
 def get_instance(module, name, config, *args):
     # GET THE CORRESPONDING CLASS / FCT
     return getattr(module, config[name]['type'])(*args, **config[name]['args'])
-
+    # *args: positional args
+    # **config[name]['args']: keyword args
+    # ** (Double Asterisk) - Keyword Argument Unpacking
+   
 
 def main(gpu, ngpus_per_node, config, resume, test, save_feature):
     if gpu == 0:
@@ -33,6 +36,8 @@ def main(gpu, ngpus_per_node, config, resume, test, save_feature):
     config['rank'] = gpu + ngpus_per_node * config['n_node']
 
     torch.cuda.set_device(gpu)
+
+    # Make sure the batch sizes are divisible by the number of GPUs
     assert config['train_supervised']['batch_size'] % config['n_gpu'] == 0
     assert config['train_unsupervised']['batch_size'] % config['n_gpu'] == 0
     assert config['val_loader']['batch_size'] % config['n_gpu'] == 0
@@ -42,8 +47,10 @@ def main(gpu, ngpus_per_node, config, resume, test, save_feature):
     config['train_supervised']['num_workers'] = int(config['train_supervised']['num_workers'] / config['n_gpu'])
     config['train_unsupervised']['num_workers'] = int(config['train_unsupervised']['num_workers'] / config['n_gpu'])
     config['val_loader']['num_workers'] = int(config['val_loader']['num_workers'] / config['n_gpu'])
+    # Initialize the distributed process group
     dist.init_process_group(backend='nccl', init_method=config['dist_url'], world_size=config['world_size'], rank=config['rank'])
 
+    # Set random seed for reproducibility
     seed = config['random_seed']
     np.random.seed(seed)
     random.seed(seed)
@@ -52,6 +59,8 @@ def main(gpu, ngpus_per_node, config, resume, test, save_feature):
     torch.backends.cudnn.deterministic = True
     torch.cuda.manual_seed_all(seed)  # if you are using multi-GPU.
 
+    # Set up data loaders and other configurations
+    # specific dataloaders are selected based on the dataset and whether testing or not
     # DATA LOADERS
     config['train_supervised']['n_labeled_examples'] = config['n_labeled_examples']
     config['train_unsupervised']['n_labeled_examples'] = config['n_labeled_examples']
@@ -108,6 +117,7 @@ def main(gpu, ngpus_per_node, config, resume, test, save_feature):
             gpu=gpu,
             test=test)
     elif save_feature:
+        supervised_loader = sup_dataloader(config['train_supervised'])
         sup_loss = CE_loss
         model = models.Save_Features(num_classes=val_loader.dataset.num_classes, conf=config['model'],
                                      sup_loss=sup_loss, ignore_index=val_loader.dataset.ignore_index)
@@ -118,7 +128,9 @@ def main(gpu, ngpus_per_node, config, resume, test, save_feature):
             model=model,
             resume=resume,
             config=config,
+            # val_loader=sup_dataloader,
             val_loader=supervised_loader,
+            # val_loader=val_loader,
             iter_per_epoch=iter_per_epoch,
             train_logger=train_logger,
             gpu=gpu,
@@ -189,6 +201,14 @@ if __name__ == '__main__':
                         help='whether to test')
     parser.add_argument('-sf', '--save_feature', default=False, type=bool,
                         help='whether to test')
+    # parser.add_argument('-c', '--config', default='configs/voc_1over32_baseline.json', type=str,
+    #                     help='Path to the config file')
+    # parser.add_argument('-r', '--resume', default='saved/voc_1over32_baseline/best_model.pth', type=str,
+    #                     help='Path to the .pth model checkpoint to resume training')
+    # parser.add_argument('-t', '--test', default=False, type=bool,
+    #                     help='whether to test')
+    # parser.add_argument('-sf', '--save_feature', default=True, type=bool,
+    #                     help='whether to test')
     args = parser.parse_args()
 
     config = json.load(open(args.config))

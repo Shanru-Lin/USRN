@@ -318,7 +318,7 @@ class USRN(BaseModel):
             self.step_save = conf['step_save']
             self.pos_thresh_value = conf['pos_thresh_value']
             self.stride = conf['stride']
-'''
+
     def forward(self, x_l=None, target_l=None, target_l_subcls=None, x_ul=None, target_ul=None,
                 curr_iter=None, epoch=None, gpu=None, gt_l=None, ul1=None, br1=None, ul2=None, br2=None, flip=None):
         if not self.training:
@@ -328,7 +328,6 @@ class USRN(BaseModel):
 
         if self.mode == 'supervised':
             feat, feat_SubCls = self.encoder(x_l)
-
             enc = self.classifier(feat)
             output_l = F.interpolate(enc, size=x_l.size()[2:], mode='bilinear', align_corners=True)
             loss_sup = self.sup_loss(output_l, target_l, ignore_index=self.ignore_index,
@@ -410,153 +409,6 @@ class USRN(BaseModel):
 
         else:
             raise ValueError("No such mode {}".format(self.mode))
-'''
-def forward(self, x_l=None, target_l=None, target_l_subcls=None, x_ul=None, target_ul=None,
-            curr_iter=None, epoch=None, gpu=None, gt_l=None, ul1=None, br1=None, ul2=None, br2=None, flip=None):
-    if not self.training:
-        # Inference mode for original-class segmentation
-        enc, _ = self.encoder(x_l)
-        enc = self.classifier(enc)
-        return F.interpolate(enc, size=x_l.size()[2:], mode='bilinear', align_corners=True)
-
-    if self.mode == 'supervised':
-        # Supervised training mode for original-class and sub-class segmentation
-        feat, feat_SubCls = self.encoder(x_l)
-
-        # Forward pass through the classifier for original-class segmentation
-        enc = self.classifier(feat)
-        output_l = F.interpolate(enc, size=x_l.size()[2:], mode='bilinear', align_corners=True)
-        
-        # Calculate the supervised loss for original-class segmentation
-        loss_sup = self.sup_loss(output_l, target_l, ignore_index=self.ignore_index,
-                                 temperature=1.0) * self.sup_loss_w
-        curr_losses = {'Ls': loss_sup}
-        outputs = {'sup_pred': output_l}
-        total_loss = loss_sup
-
-        # Forward pass through the classifier for sub-class segmentation
-        enc_SubCls = self.classifier_SubCls(feat_SubCls)
-        output_l_SubCls = F.interpolate(enc_SubCls, size=x_l.size()[2:], mode='bilinear', align_corners=True)
-        
-        # Calculate the supervised loss for sub-class segmentation
-        loss_sup_SubCls = self.sup_loss(output_l_SubCls, target_l_subcls, ignore_index=self.ignore_index, temperature=1.0) * self.sup_loss_w
-        curr_losses['Ls_sub'] = loss_sup_SubCls
-        total_loss = total_loss + loss_sup_SubCls * self.loss_weight_subcls
-
-        return total_loss, curr_losses, outputs
-
-    elif self.mode == 'semi':
-    # Semi-supervised training mode for original-class and sub-class segmentation
-
-    # Supervised with labeled data
-        feat, feat_SubCls = self.encoder(x_l)
-
-        # Forward pass through the classifier for original-class segmentation
-        enc = self.classifier(feat)
-        output_l = F.interpolate(enc, size=x_l.size()[2:], mode='bilinear', align_corners=True)
-        
-        # Calculate the supervised loss for original-class segmentation of labeled data
-        loss_sup = self.sup_loss(output_l, target_l, ignore_index=self.ignore_index,
-                                 temperature=1.0) * self.sup_loss_w
-        curr_losses = {'Ls': loss_sup}
-        outputs = {'sup_pred': output_l}
-        total_loss = loss_sup
-
-        # Forward pass through the classifier for sub-class segmentation of labeled data
-        enc_SubCls = self.classifier_SubCls(feat_SubCls)
-        output_l_SubCls = F.interpolate(enc_SubCls, size=x_l.size()[2:], mode='bilinear', align_corners=True)
-        
-        # Calculate the supervised loss for sub-class segmentation
-        loss_sup_SubCls = self.sup_loss(output_l_SubCls, target_l_subcls, ignore_index=self.ignore_index, temperature=1.0) * self.sup_loss_w
-        curr_losses['Ls_sub'] = loss_sup_SubCls
-        total_loss = total_loss + loss_sup_SubCls * self.loss_weight_subcls
-
-        if epoch < self.epoch_start_unsup:
-            # Return the losses and outputs if still in the supervised training phase
-            return total_loss, curr_losses, outputs
-
-    # Semi-supervised training phase with unlabeled data
-        x_w = x_ul[:, 0, :, :, :]  # Weak Augmentation
-        x_s = x_ul[:, 1, :, :, :]  # Strong Augmentation
-
-        # 1. classifier (data to logits) for orginal-class and sub-class (weak and strong) 
-
-        # Forward pass through the classifier for orginal-class segmentation (weak and strong)
-        feat_s, feat_SubCls_s = self.encoder(x_s)
-        if self.downsample: # perform average pooling to reduce the feature map size
-            feat_s = F.avg_pool2d(feat_s, kernel_size=2, stride=2)
-        logits_s = self.classifier(feat_s)
-        
-        feat_w, feat_SubCls_w = self.encoder(x_w)
-        if self.downsample:
-            feat_w = F.avg_pool2d(feat_w, kernel_size=2, stride=2)
-        logits_w = self.classifier(feat_w)
-
-        # Forward pass through the classifier for sub-class segmentation (weak and strong)
-        if self.downsample:
-            feat_SubCls_s = F.avg_pool2d(feat_SubCls_s, kernel_size=2, stride=2)
-        logits_SubCls_s = self.classifier_SubCls(feat_SubCls_s)
-        if self.downsample:
-            feat_SubCls_w = F.avg_pool2d(feat_SubCls_w, kernel_size=2, stride=2)
-        logits_SubCls_w = self.classifier_SubCls(feat_SubCls_w)
-
-        # 2. sub-class
-
-        # 2.1 label: pseudo-label (logits to probs to label) for sub-class (weak)
-        # Perform softmax on the sub-class segmentation logits to obtain probabilities
-        seg_w_SubCls = F.softmax(logits_SubCls_w, 1)
-        # Use the maximum probability as pseudo-logits for unlabeled sub-class segmentation
-        pseudo_logits_SubCls_w = seg_w_SubCls.max(1)[0].detach()
-        # Use the corresponding class label of the maximum probability as pseudo-label for unlabeled sub-class segmentation
-        pseudo_label_SubCls_w = seg_w_SubCls.max(1)[1].detach()
-
-        # 2.2 mask: basic mask (weak)
-        # Create a positive mask for unlabeled sub-class segmentation using a threshold
-        pos_mask_SubCls = pseudo_logits_SubCls_w > self.pos_thresh_value
-        
-        # 2.3 self-traning loss for sub-class (compare strong's logits and weak's labels for sub-class)
-        # Calculate the unsupervised loss for sub-class segmentation with the positive mask
-        loss_unsup_SubCls = (F.cross_entropy(logits_SubCls_s, pseudo_label_SubCls_w, reduction='none') * pos_mask_SubCls).mean()
-        curr_losses['Lu_sub'] = loss_unsup_SubCls
-        total_loss = total_loss + loss_unsup_SubCls * self.loss_weight_unsup * self.loss_weight_subcls
-
-        # 3. orginal-class
-
-        # 3.1 label: convert sub-class labels to original-class labels (weak)
-        # Convert the sub-class labels to parent-class labels for regularization
-        SubCls_reg_label = self.SubCls_to_ParentCls(pseudo_label_SubCls_w)
-        # Perform softmax on the weakly augmented segmentation logits to obtain probabilities
-        seg_w = F.softmax(logits_w, 1)
-        # Convert the sub-class labels to one-hot representation
-        SubCls_reg_label_one_hot = F.one_hot(SubCls_reg_label, num_classes=self.num_classes).permute(0, 3, 1, 2)
-
-        # 3.2 mask: entropy-based mask for orginal-class (weak)
-        # Compute the entropy with prob
-        seg_w_ent = torch.sum(self.prob_2_entropy(seg_w.detach()), 1)
-        seg_w_SubCls_ent = torch.sum(self.prob_2_entropy(seg_w_SubCls.detach()), 1)
-        # Create a mask for the weakly augmented sub-class segmentation based on entropy
-        SubCls_reg_label_one_hot_ent_reg = SubCls_reg_label_one_hot.clone()
-        SubCls_reg_label_one_hot_ent_reg[(seg_w_SubCls_ent > seg_w_ent).unsqueeze(1).repeat(1,seg_w.shape[1], 1, 1)] = 1
-        # Mask the weakly augmented sub-class segmentation with the entropy-based mask
-        seg_w_reg = seg_w * SubCls_reg_label_one_hot_ent_reg
-        # Use the maximum probability as pseudo-logits for weakly augmented sub-class segmentation
-        pseudo_logits_w_reg = seg_w_reg.max(1)[0].detach()
-        # Use the corresponding class label of maximum probability as pseudo-label for weakly augmented sub-class segmentation
-        pseudo_label_w_reg = seg_w_reg.max(1)[1].detach()
-        # Create a positive mask for weakly augmented sub-class segmentation using a threshold
-        pos_mask_reg = pseudo_logits_w_reg > self.pos_thresh_value
-
-        # 3.3 loss: entropy-based self-training loss (compare strong's logits and weak's labels)
-        #                         (named as regularization loss in the code) 
-        # Calculate the unsupervised loss for weakly augmented sub-class segmentation with the positive mask
-        loss_unsup_reg = (F.cross_entropy(logits_s, pseudo_label_w_reg, reduction='none') * pos_mask_reg).mean()
-        curr_losses['Lu_reg'] = loss_unsup_reg
-        total_loss = total_loss + loss_unsup_reg * self.loss_weight_unsup
-
-        return total_loss, curr_losses, outputs
-
-    else:
-        raise ValueError("No such mode {}".format(self.mode))
 
     def prob_2_entropy(self, prob):
         n, c, h, w = prob.size()
