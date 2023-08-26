@@ -251,7 +251,8 @@ class Baseline(BaseModel):
         return chain(self.encoder.get_module_params(), self.classifier.parameters())
 
 class USRN(BaseModel):
-    def __init__(self, num_classes, conf, sup_loss=None, ignore_index=None, testing=False, pretrained=True):
+    def __init__(self, num_classes, conf, sup_loss=None, ignore_index=None, testing=False, pretrained=True,
+                 num_features=512, nb_prototype = 80):
         super(USRN, self).__init__()
         assert int(conf['supervised']) + int(conf['semi']) == 1, 'one mode only'
         if conf['supervised']:
@@ -323,6 +324,12 @@ class USRN(BaseModel):
 
         self.total_loss = 0
         self.curr_losses = {}
+
+        # {
+        self.DMlayer = Distanceminimi_Layer_learned(in_features=(num_features // 16), out_features = nb_prototype, dist='cos')
+        self.DMBN = nn.BatchNorm2d(nb_prototype)
+        self.get_uncer  = nn.Conv2d(nb_prototype, 1, 1)
+        # }
 
     def forward(self, x_l=None, target_l=None, target_l_subcls=None, x_ul=None, target_ul=None,
                 curr_iter=None, epoch=None, gpu=None, gt_l=None, ul1=None, br1=None, ul2=None, br2=None, flip=None):
@@ -446,3 +453,24 @@ class USRN(BaseModel):
         return chain(self.encoder.get_module_params(), self.classifier.parameters(),
                      self.classifier_SubCls.parameters())
 
+# {
+class Distanceminimi_Layer_learned(nn.Module):
+    def __init__(self, in_features=0, out_features=0, dist='lin'):
+        super(Distanceminimi_Layer_learned, self).__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.dist=dist
+        self.omega = nn.Parameter(torch.Tensor(1, out_features, in_features, 1, 1))
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+
+        nn.init.normal_(self.omega, mean=0, std=1)#/self.out_features)
+
+    def forward(self, x):
+        x = x.unsqueeze(1)
+        out = F.cosine_similarity(x, self.omega, dim=2, eps=1e-30)
+
+        return out, self.omega
+# }
