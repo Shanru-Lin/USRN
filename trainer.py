@@ -859,8 +859,8 @@ class Trainer_USRN(BaseTrainer):
                             self.logger.info("epoch:{}, L={:.3f}, Ls={:.3f}, Ls_sub={:.3f}".
                                              format(epoch, total_loss, cur_losses['Ls'], cur_losses['Ls_sub']))
                         else:
-                            self.logger.info("epoch:{}, L={:.3f}, Ls={:.3f}, Ls_sub={:.3f}, Lu_reg={:.3f}, Lu_sub={:.3f}".
-                                             format(epoch, total_loss, cur_losses['Ls'], cur_losses['Ls_sub'],
+                            self.logger.info("epoch:{}, L={:.3f}, L_task={:.3f}, Ls={:.3f}, Ls_sub={:.3f}, Lu_reg={:.3f}, Lu_sub={:.3f}".
+                                             format(epoch, total_loss, cur_losses['L_task'], cur_losses['Ls'], cur_losses['Ls_sub'],
                                                     cur_losses['Lu_reg'], cur_losses['Lu_sub'], ))
 
             if self.gpu == 0:
@@ -873,6 +873,7 @@ class Trainer_USRN(BaseTrainer):
                 descrip = 'T ({}) | '.format(epoch)
                 for key in cur_losses:
                     descrip += key + ' {:.2f} '.format(getattr(self, key).average)
+                descrip += 'L_total'+' {:.2f} '.format(total_loss)
                 descrip += 'mIoU_l {:.2f} ul {:.2f} |'.format(100*self.mIoU_l, 100*self.mIoU_ul)
                 tbar.set_description(descrip)
 
@@ -912,6 +913,7 @@ class Trainer_USRN(BaseTrainer):
                 output = output[:, :, :H, :W]
                 # LOSS
                 loss = F.cross_entropy(output, target, ignore_index=self.ignore_index)
+                    # for F.cross_entropy, output should be logits and target should be labels
                 total_loss_val.update(loss.item())
 
                 # eval_metrics has already implemented DDP synchronized
@@ -938,6 +940,7 @@ class Trainer_USRN(BaseTrainer):
         return log
 
     def _reset_metrics(self):
+        self.L_task = AverageMeter()
         self.Ls = AverageMeter()
         self.Ls_sub = AverageMeter()
         self.Lu_reg = AverageMeter()
@@ -994,6 +997,8 @@ class Trainer_USRN(BaseTrainer):
 
     def _log_values(self, cur_losses):
         logs = {}
+        if "L_task" in cur_losses.keys():
+            logs['L_task'] = self.L_task.average
         if "Ls" in cur_losses.keys():
             logs['Ls'] = self.Ls.average
         if "Ls_sub" in cur_losses.keys():

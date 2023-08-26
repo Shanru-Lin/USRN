@@ -1,10 +1,8 @@
 ### integration
 #### comparison
-train: bts_main <-> trainer (loaded from main)
+train: bts.main.main_workder <-> USRN.trainer.Trainer_USRN 
 model: <-> model 
-loss: bts_ldu <-> 
-        loss_sup:CE; loss_sup_SubCls; loss_unsup_SubCls; loss_unsup_reg 
-        没有def的function 直接one-liner计算了          
+loss: bts_ldu <-> USRN.model.USRN(.forward)    
 
 ### differences between models
 #### in `forward` 

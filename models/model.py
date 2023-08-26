@@ -354,6 +354,8 @@ class USRN(BaseModel):
             self.unsupervised_sub_loss(logits_SubCls_s, pseudo_logits_SubCls_w, pseudo_label_SubCls_w)
             self.unsupervised_reg_loss(logits_w, logits_s, seg_w_SubCls, pseudo_label_SubCls_w)
             
+            self.curr_losses['L_task'] = self.total_loss
+
             return self.total_loss, self.curr_losses, outputs
 
         else:
