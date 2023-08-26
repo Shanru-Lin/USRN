@@ -873,7 +873,7 @@ class Trainer_USRN(BaseTrainer):
                 descrip = 'T ({}) | '.format(epoch)
                 for key in cur_losses:
                     descrip += key + ' {:.2f} '.format(getattr(self, key).average)
-                descrip += 'L_total'+' {:.2f} '.format(total_loss)
+                descrip += 'L_total(backpropogated)'+' {:.2f} '.format(total_loss)
                 descrip += 'mIoU_l {:.2f} ul {:.2f} |'.format(100*self.mIoU_l, 100*self.mIoU_ul)
                 tbar.set_description(descrip)
 
