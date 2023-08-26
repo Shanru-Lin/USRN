@@ -1,3 +1,11 @@
+### integration
+#### comparison
+train: bts_main <-> trainer (loaded from main)
+model: <-> model 
+loss: bts_ldu <-> 
+        loss_sup:CE; loss_sup_SubCls; loss_unsup_SubCls; loss_unsup_reg 
+        没有def的function 直接one-liner计算了          
+
 ### differences between models
 #### in `forward` 
     note: if not training  = inference or eval

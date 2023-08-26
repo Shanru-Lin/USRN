@@ -10,6 +10,8 @@ from models.modeling.deeplab import DeepLab as DeepLab_v3p
 from models.modeling.deeplab_SubCls import Deeplab_SubCls as Deeplab_SubCls
 import numpy as np
 
+#from models import loss
+
 class Test(BaseModel):
     def __init__(self, num_classes, conf, sup_loss=None, ignore_index=None, testing=False, pretrained=True):
 
@@ -319,97 +321,95 @@ class USRN(BaseModel):
             self.pos_thresh_value = conf['pos_thresh_value']
             self.stride = conf['stride']
 
+        self.total_loss = 0
+        self.curr_losses = {}
+
     def forward(self, x_l=None, target_l=None, target_l_subcls=None, x_ul=None, target_ul=None,
                 curr_iter=None, epoch=None, gpu=None, gt_l=None, ul1=None, br1=None, ul2=None, br2=None, flip=None):
+        
         if not self.training:
             enc, _ = self.encoder(x_l)
             enc = self.classifier(enc)
             return F.interpolate(enc, size=x_l.size()[2:], mode='bilinear', align_corners=True)
 
         if self.mode == 'supervised':
-            feat, feat_SubCls = self.encoder(x_l)
-            enc = self.classifier(feat)
-            output_l = F.interpolate(enc, size=x_l.size()[2:], mode='bilinear', align_corners=True)
-            loss_sup = self.sup_loss(output_l, target_l, ignore_index=self.ignore_index,
-                                     temperature=1.0) * self.sup_loss_w
-            curr_losses = {'Ls': loss_sup}
-            outputs = {'sup_pred': output_l}
-            total_loss = loss_sup
-
-            enc_SubCls = self.classifier_SubCls(feat_SubCls)
-            output_l_SubCls = F.interpolate(enc_SubCls, size=x_l.size()[2:], mode='bilinear', align_corners=True)
-            loss_sup_SubCls = self.sup_loss(output_l_SubCls, target_l_subcls, ignore_index=self.ignore_index, temperature=1.0) * self.sup_loss_w
-            curr_losses['Ls_sub'] = loss_sup_SubCls
-            total_loss = total_loss + loss_sup_SubCls * self.loss_weight_subcls
-
-            return total_loss, curr_losses, outputs
+            outputs = self.supervised_loss(x_l, target_l, target_l_subcls)
 
         elif self.mode == 'semi':
-            # feat = self.encoder(x_l)
-            feat, feat_SubCls = self.encoder(x_l)
-            enc = self.classifier(feat)
-            output_l = F.interpolate(enc, size=x_l.size()[2:], mode='bilinear', align_corners=True)
-            loss_sup = self.sup_loss(output_l, target_l, ignore_index=self.ignore_index,
-                                     temperature=1.0) * self.sup_loss_w
-            curr_losses = {'Ls': loss_sup}
-            outputs = {'sup_pred': output_l}
-            total_loss = loss_sup
-
-            enc_SubCls = self.classifier_SubCls(feat_SubCls)
-            output_l_SubCls = F.interpolate(enc_SubCls, size=x_l.size()[2:], mode='bilinear', align_corners=True)
-            loss_sup_SubCls = self.sup_loss(output_l_SubCls, target_l_subcls, ignore_index=self.ignore_index, temperature=1.0) * self.sup_loss_w
-            curr_losses['Ls_sub'] = loss_sup_SubCls
-            total_loss = total_loss + loss_sup_SubCls * self.loss_weight_subcls
-
+            outputs = self.supervised_loss(x_l, target_l, target_l_subcls)
+            
             if epoch < self.epoch_start_unsup:
-                return total_loss, curr_losses, outputs
-
-            # x_ul: [batch_size, 2, 3, H, W]
-            x_w = x_ul[:, 0, :, :, :]  # Weak Aug
+                return self.total_loss, self.curr_losses, outputs
+            
+            x_w = x_ul[:, 0, :, :, :]  # Weak Aug; x_ul: [batch_size, 2, 3, H, W]
             x_s = x_ul[:, 1, :, :, :]  # Strong Aug
-            feat_s, feat_SubCls_s = self.encoder(x_s)
-            if self.downsample:
-                feat_s = F.avg_pool2d(feat_s, kernel_size=2, stride=2)
-            logits_s = self.classifier(feat_s)
-            feat_w, feat_SubCls_w = self.encoder(x_w)
-            if self.downsample:
-                feat_w = F.avg_pool2d(feat_w, kernel_size=2, stride=2)
-            logits_w = self.classifier(feat_w)
 
-            if self.downsample:
-                feat_SubCls_s = F.avg_pool2d(feat_SubCls_s, kernel_size=2, stride=2)
-            logits_SubCls_s = self.classifier_SubCls(feat_SubCls_s)
-            if self.downsample:
-                feat_SubCls_w = F.avg_pool2d(feat_SubCls_w, kernel_size=2, stride=2)
-            logits_SubCls_w = self.classifier_SubCls(feat_SubCls_w)
+            logits_w, logits_SubCls_w = self.get_logits(x_w)
+            logits_s, logits_SubCls_s = self.get_logits(x_s)
+
             seg_w_SubCls = F.softmax(logits_SubCls_w, 1)
-            pseudo_logits_SubCls_w = seg_w_SubCls.max(1)[0].detach()
-            pseudo_label_SubCls_w = seg_w_SubCls.max(1)[1].detach()
-            pos_mask_SubCls = pseudo_logits_SubCls_w > self.pos_thresh_value
-            loss_unsup_SubCls = (F.cross_entropy(logits_SubCls_s, pseudo_label_SubCls_w, reduction='none') * pos_mask_SubCls).mean()
-            curr_losses['Lu_sub'] = loss_unsup_SubCls
-            total_loss = total_loss + loss_unsup_SubCls * self.loss_weight_unsup * self.loss_weight_subcls
-
-            SubCls_reg_label = self.SubCls_to_ParentCls(pseudo_label_SubCls_w)
-            seg_w = F.softmax(logits_w, 1)
-            SubCls_reg_label_one_hot = F.one_hot(SubCls_reg_label, num_classes=self.num_classes).permute(0,3,1,2)
-            # seg_w_reg = seg_w * SubCls_reg_label_one_hot
-            seg_w_ent = torch.sum(self.prob_2_entropy(seg_w.detach()),1)
-            seg_w_SubCls_ent = torch.sum(self.prob_2_entropy(seg_w_SubCls.detach()),1)
-            SubCls_reg_label_one_hot_ent_reg = SubCls_reg_label_one_hot.clone()
-            SubCls_reg_label_one_hot_ent_reg[(seg_w_SubCls_ent>seg_w_ent).unsqueeze(1).repeat(1,seg_w.shape[1],1,1)] = 1
-            seg_w_reg = seg_w * SubCls_reg_label_one_hot_ent_reg
-            pseudo_logits_w_reg = seg_w_reg.max(1)[0].detach()
-            pseudo_label_w_reg = seg_w_reg.max(1)[1].detach()
-            pos_mask_reg = pseudo_logits_w_reg > self.pos_thresh_value
-            loss_unsup_reg = (F.cross_entropy(logits_s, pseudo_label_w_reg, reduction='none') * pos_mask_reg).mean()
-            curr_losses['Lu_reg'] = loss_unsup_reg
-            total_loss = total_loss + loss_unsup_reg * self.loss_weight_unsup
-            return total_loss, curr_losses, outputs
+            pseudo_logits_SubCls_w = seg_w_SubCls.max(1)[0].detach()  # the maximum probability value along the class dimension of seg_w_SubCls for each pixel. # "pseudo-logits" seem to be calculated by taking the maximum probability values from the softmax output, "pseudo" is used here to indicate that these values are not true logits but are derived from probabilities.
+            pseudo_label_SubCls_w = seg_w_SubCls.max(1)[1].detach() # the class label with the maximum probability value along the class dimension of seg_w_SubCls for each pixel. It represents the predicted class label for each pixel.
+            
+            self.unsupervised_sub_loss(logits_SubCls_s, pseudo_logits_SubCls_w, pseudo_label_SubCls_w)
+            self.unsupervised_reg_loss(logits_w, logits_s, seg_w_SubCls, pseudo_label_SubCls_w)
+            
+            return self.total_loss, self.curr_losses, outputs
 
         else:
             raise ValueError("No such mode {}".format(self.mode))
+        
+    def supervised_loss(self, x_l, target_l, target_l_subcls):
+        feat, feat_SubCls = self.encoder(x_l)
+        enc = self.classifier(feat)
+        output_l = F.interpolate(enc, size=x_l.size()[2:], mode='bilinear', align_corners=True)
+        loss_sup = self.sup_loss(output_l, target_l, ignore_index=self.ignore_index,
+                                    temperature=1.0) * self.sup_loss_w
+        self.curr_losses = {'Ls': loss_sup}
+        outputs = {'sup_pred': output_l}
+        self.total_loss = loss_sup
 
+        enc_SubCls = self.classifier_SubCls(feat_SubCls)
+        output_l_SubCls = F.interpolate(enc_SubCls, size=x_l.size()[2:], mode='bilinear', align_corners=True)
+        loss_sup_SubCls = self.sup_loss(output_l_SubCls, target_l_subcls, ignore_index=self.ignore_index, temperature=1.0) * self.sup_loss_w
+        self.curr_losses['Ls_sub'] = loss_sup_SubCls
+        self.total_loss = self.total_loss + loss_sup_SubCls * self.loss_weight_subcls
+
+        return outputs
+    
+    def unsupervised_sub_loss(self, logits_SubCls_s, pseudo_logits_SubCls_w, pseudo_label_SubCls_w):
+        pos_mask_SubCls = pseudo_logits_SubCls_w > self.pos_thresh_value
+        loss_unsup_SubCls = (F.cross_entropy(logits_SubCls_s, pseudo_label_SubCls_w, reduction='none') * pos_mask_SubCls).mean()
+        self.curr_losses['Lu_sub'] = loss_unsup_SubCls
+        self.total_loss = self.total_loss + loss_unsup_SubCls * self.loss_weight_unsup * self.loss_weight_subcls
+        return
+    
+    def unsupervised_reg_loss(self, logits_w, logits_s, seg_w_SubCls, pseudo_label_SubCls_w):
+        SubCls_reg_label = self.SubCls_to_ParentCls(pseudo_label_SubCls_w)
+        seg_w = F.softmax(logits_w, 1)
+        SubCls_reg_label_one_hot = F.one_hot(SubCls_reg_label, num_classes=self.num_classes).permute(0,3,1,2)
+        seg_w_ent = torch.sum(self.prob_2_entropy(seg_w.detach()),1)
+        seg_w_SubCls_ent = torch.sum(self.prob_2_entropy(seg_w_SubCls.detach()),1)
+        SubCls_reg_label_one_hot_ent_reg = SubCls_reg_label_one_hot.clone()
+        SubCls_reg_label_one_hot_ent_reg[(seg_w_SubCls_ent>seg_w_ent).unsqueeze(1).repeat(1,seg_w.shape[1],1,1)] = 1
+        seg_w_reg = seg_w * SubCls_reg_label_one_hot_ent_reg
+        pseudo_logits_w_reg = seg_w_reg.max(1)[0].detach()
+        pseudo_label_w_reg = seg_w_reg.max(1)[1].detach()
+        pos_mask_reg = pseudo_logits_w_reg > self.pos_thresh_value
+        loss_unsup_reg = (F.cross_entropy(logits_s, pseudo_label_w_reg, reduction='none') * pos_mask_reg).mean()
+        self.curr_losses['Lu_reg'] = loss_unsup_reg
+        self.total_loss = self.total_loss + loss_unsup_reg * self.loss_weight_unsup
+        return
+
+    def get_logits(self,x):      
+        feat, feat_SubCls = self.encoder(x)
+        if self.downsample:
+            feat = F.avg_pool2d(feat, kernel_size=2, stride=2)
+            feat_SubCls = F.avg_pool2d(feat_SubCls, kernel_size=2, stride=2)
+        logits = self.classifier(feat)
+        logits_SubCls = self.classifier_SubCls(feat_SubCls)
+        return logits, logits_SubCls
+    
     def prob_2_entropy(self, prob):
         n, c, h, w = prob.size()
         return -torch.mul(prob, torch.log2(prob + 1e-30)) / np.log2(c)
