@@ -15,6 +15,8 @@ from utils.helpers import DeNormalize
 import torch.distributed as dist
 import os
 
+import torch.nn as nn
+
 class Test(BaseTrainer):
     def __init__(self, model, resume, config, iter_per_epoch, val_loader=None, train_logger=None, gpu=None, test=False):
         super(Test, self).__init__(model, resume, config, iter_per_epoch, train_logger, gpu=gpu, test=test)
