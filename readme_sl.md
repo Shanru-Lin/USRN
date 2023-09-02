@@ -1,7 +1,9 @@
 ### integration
 #### comparison
 train: bts.main.main_workder <-> USRN.trainer.Trainer_USRN 
-model: <-> model 
+model: bts_ldu.BtsModel <-> USRN.models.model 
+        encoder+decoder <->
+        decoder: bts_ldu.bts <->
 loss: bts_ldu <-> USRN.model.USRN(.forward)    
 
 ### differences between models

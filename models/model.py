@@ -251,8 +251,7 @@ class Baseline(BaseModel):
         return chain(self.encoder.get_module_params(), self.classifier.parameters())
 
 class USRN(BaseModel):
-    def __init__(self, num_classes, conf, sup_loss=None, ignore_index=None, testing=False, pretrained=True,
-                 num_features=512, nb_prototype = 80):
+    def __init__(self, num_classes, conf, sup_loss=None, ignore_index=None, testing=False, pretrained=True, nb_prototype = 80):
         super(USRN, self).__init__()
         assert int(conf['supervised']) + int(conf['semi']) == 1, 'one mode only'
         if conf['supervised']:
@@ -273,6 +272,10 @@ class USRN(BaseModel):
 
         self.loss_weight_subcls = conf['loss_weight_subcls']
         self.loss_weight_unsup = conf['loss_weight_unsup']
+        #{
+        # self.loss_weight_uncer_relevant = conf['loss_weight_uncer_relevant']
+        self.loss_weight_uncer_relevant = 1
+        # }
         ### VOC Dataset
         if conf['n_labeled_examples'] == 662:
             self.split_list = [132, 2, 1, 1, 1, 2, 3, 4, 7, 2, 1, 2, 6, 2, 2, 15, 1, 1, 2, 2, 1]
@@ -325,11 +328,11 @@ class USRN(BaseModel):
         self.total_loss = 0
         self.curr_losses = {}
 
-        # {
-        self.DMlayer = Distanceminimi_Layer_learned(in_features=(num_features // 16), out_features = nb_prototype, dist='cos')
-        self.DMBN = nn.BatchNorm2d(nb_prototype)
-        self.get_uncer  = nn.Conv2d(nb_prototype, 1, 1)
-        # }
+        # # {
+        # self.DMlayer = Distanceminimi_Layer_learned(in_features=(num_features // 16), out_features = nb_prototype, dist='cos')
+        # self.DMBN = nn.BatchNorm2d(nb_prototype)
+        # self.get_uncer  = nn.Conv2d(nb_prototype, 1, 1)
+        # # }
 
     def forward(self, x_l=None, target_l=None, target_l_subcls=None, x_ul=None, target_ul=None,
                 curr_iter=None, epoch=None, gpu=None, gt_l=None, ul1=None, br1=None, ul2=None, br2=None, flip=None):
@@ -340,35 +343,52 @@ class USRN(BaseModel):
             return F.interpolate(enc, size=x_l.size()[2:], mode='bilinear', align_corners=True)
 
         if self.mode == 'supervised':
-            outputs = self.supervised_loss(x_l, target_l, target_l_subcls)
+            outputs = self.comp_features_and_supervised_loss(x_l, target_l, target_l_subcls)
 
         elif self.mode == 'semi':
-            outputs = self.supervised_loss(x_l, target_l, target_l_subcls)
+            outputs = self.comp_features_and_supervised_loss(x_l, target_l, target_l_subcls)
             
             if epoch < self.epoch_start_unsup:
                 return self.total_loss, self.curr_losses, outputs
+            
+            # if self.training:
+            #     return final_depth, final_uncer, omega.squeeze(), embedding_
+            # else:
+            #     return final_depth, torch.sigmoid(final_uncer)
             
             x_w = x_ul[:, 0, :, :, :]  # Weak Aug; x_ul: [batch_size, 2, 3, H, W]
             x_s = x_ul[:, 1, :, :, :]  # Strong Aug
 
             logits_w, logits_SubCls_w = self.get_logits(x_w)
             logits_s, logits_SubCls_s = self.get_logits(x_s)
-
+            #{
+            # logits_s, logits_SubCls_s, uncer_sub_s, omega_sub, subembedding_ = self.get_logits_and_uncer(x_s)
+            #}
             seg_w_SubCls = F.softmax(logits_SubCls_w, 1)
             pseudo_logits_SubCls_w = seg_w_SubCls.max(1)[0].detach()  # the maximum probability value along the class dimension of seg_w_SubCls for each pixel. # "pseudo-logits" seem to be calculated by taking the maximum probability values from the softmax output, "pseudo" is used here to indicate that these values are not true logits but are derived from probabilities.
             pseudo_label_SubCls_w = seg_w_SubCls.max(1)[1].detach() # the class label with the maximum probability value along the class dimension of seg_w_SubCls for each pixel. It represents the predicted class label for each pixel.
             
-            self.unsupervised_sub_loss(logits_SubCls_s, pseudo_logits_SubCls_w, pseudo_label_SubCls_w)
-            self.unsupervised_reg_loss(logits_w, logits_s, seg_w_SubCls, pseudo_label_SubCls_w)
+            self.comp_features_and_unsupervised_sub_loss(logits_SubCls_s, pseudo_logits_SubCls_w, pseudo_label_SubCls_w)
+            self.comp_features_and_unsupervised_reg_loss(logits_w, logits_s, seg_w_SubCls, pseudo_label_SubCls_w)
             
             self.curr_losses['L_task'] = self.total_loss
 
+            #{ 
+            # self.curr_losses['L_uncertainty'] = self.uncertainty_loss(uncer_sub_s, logits_SubCls_s, logits_SubCls_w)
+            # self.curr_losses['L_dissimilar'] = self.dissimilar_loss(omega_sub)
+            # self.curr_losses['L_entropy'] = self.entropy_loss(subembedding_)
+            # self.total_loss = self.total_loss +  self.loss_weight_uncer_relevant * (self.curr_losses['L_uncertainty'] + self.curr_losses['L_dissimilar'] + self.curr_losses['L_entropy'])
+            # }
+
             return self.total_loss, self.curr_losses, outputs
+            #{
+            # return self.total_loss, self.curr_losses, outputs, uncer_sub_s, omega_sub, subembedding_
+            # }
 
         else:
             raise ValueError("No such mode {}".format(self.mode))
         
-    def supervised_loss(self, x_l, target_l, target_l_subcls):
+    def comp_features_and_supervised_loss(self, x_l, target_l, target_l_subcls):
         feat, feat_SubCls = self.encoder(x_l)
         enc = self.classifier(feat)
         output_l = F.interpolate(enc, size=x_l.size()[2:], mode='bilinear', align_corners=True)
@@ -386,14 +406,14 @@ class USRN(BaseModel):
 
         return outputs
     
-    def unsupervised_sub_loss(self, logits_SubCls_s, pseudo_logits_SubCls_w, pseudo_label_SubCls_w):
+    def comp_features_and_unsupervised_sub_loss(self, logits_SubCls_s, pseudo_logits_SubCls_w, pseudo_label_SubCls_w):
         pos_mask_SubCls = pseudo_logits_SubCls_w > self.pos_thresh_value
         loss_unsup_SubCls = (F.cross_entropy(logits_SubCls_s, pseudo_label_SubCls_w, reduction='none') * pos_mask_SubCls).mean()
         self.curr_losses['Lu_sub'] = loss_unsup_SubCls
         self.total_loss = self.total_loss + loss_unsup_SubCls * self.loss_weight_unsup * self.loss_weight_subcls
         return
     
-    def unsupervised_reg_loss(self, logits_w, logits_s, seg_w_SubCls, pseudo_label_SubCls_w):
+    def comp_features_and_unsupervised_reg_loss(self, logits_w, logits_s, seg_w_SubCls, pseudo_label_SubCls_w):
         SubCls_reg_label = self.SubCls_to_ParentCls(pseudo_label_SubCls_w)
         seg_w = F.softmax(logits_w, 1)
         SubCls_reg_label_one_hot = F.one_hot(SubCls_reg_label, num_classes=self.num_classes).permute(0,3,1,2)
@@ -419,6 +439,49 @@ class USRN(BaseModel):
         logits_SubCls = self.classifier_SubCls(feat_SubCls)
         return logits, logits_SubCls
     
+    def get_logits_and_uncer(self,x):      
+        feat, feat_SubCls = self.encoder(x)
+        if self.downsample:
+            feat = F.avg_pool2d(feat, kernel_size=2, stride=2)
+            feat_SubCls = F.avg_pool2d(feat_SubCls, kernel_size=2, stride=2)
+        #{ original class 先不加 因为没有supervise
+        # embedding_, omega = self.DMlayer(feat)
+        # embedding = torch.exp(-embedding_)
+        # out = self.DMBN(embedding)
+        # final_uncer = self.get_uncer(out)
+        # } 
+        #{ sub class
+        # subembedding_, omega_sub = self.DMlayer(feat_SubCls)
+        # subembedding = torch.exp(-subembedding_)
+        # out_feat_sub = self.DMBN(subembedding)
+        # uncer_sub = self.get_uncer(out_feat_sub)
+        # logits = self.classifier(feat)
+        # logits_SubCls = self.classifier_SubCls(out_feat_sub)
+        # return logits, logits_SubCls, uncer_sub, omega_sub.squeeze(), subembedding_
+        # }
+        logits = self.classifier(feat)
+        logits_SubCls = self.classifier_SubCls(feat_SubCls)
+        return logits, logits_SubCls
+
+    #{
+    def uncertainty_loss(self, uncer, outputs, pseudo_gt):
+        abs_error = abs(outputs.detach() - pseudo_gt)
+        abs_error[abs_error>1] = 1
+        abs_error = abs_error.detach()
+        loss = nn.BCEWithLogitsLoss(pos_weight = torch.tensor([5.0]).cuda(), reduction='mean')(uncer, abs_error)
+        return loss
+
+    def entropy_loss(self, embedding):
+        embedding = nn.Softmax(dim=1)(embedding)
+        minus_entropy = embedding * torch.log(embedding)
+        minus_entropy = torch.sum(minus_entropy, dim=1)
+        return minus_entropy.mean()
+
+    def dissimilar_loss(self, protos):
+        loss = -1 * torch.mean(torch.cdist(protos, protos))
+        return loss
+    #}
+
     def prob_2_entropy(self, prob):
         n, c, h, w = prob.size()
         return -torch.mul(prob, torch.log2(prob + 1e-30)) / np.log2(c)
