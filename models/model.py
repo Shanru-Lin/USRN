@@ -251,7 +251,7 @@ class Baseline(BaseModel):
         return chain(self.encoder.get_module_params(), self.classifier.parameters())
 
 class USRN(BaseModel):
-    def __init__(self, num_classes, conf, sup_loss=None, ignore_index=None, testing=False, pretrained=True, nb_prototype = 80):
+    def __init__(self, num_classes, conf, sup_loss=None, ignore_index=None, testing=False, pretrained=True, num_features=512, nb_prototype = 80):
         super(USRN, self).__init__()
         assert int(conf['supervised']) + int(conf['semi']) == 1, 'one mode only'
         if conf['supervised']:
@@ -328,11 +328,11 @@ class USRN(BaseModel):
         self.total_loss = 0
         self.curr_losses = {}
 
-        # # {
-        # self.DMlayer = Distanceminimi_Layer_learned(in_features=(num_features // 16), out_features = nb_prototype, dist='cos')
-        # self.DMBN = nn.BatchNorm2d(nb_prototype)
-        # self.get_uncer  = nn.Conv2d(nb_prototype, 1, 1)
-        # # }
+        # {
+        self.DMlayer = Distanceminimi_Layer_learned(in_features=(num_features // 16), out_features = nb_prototype, dist='cos')
+        self.DMBN = nn.BatchNorm2d(nb_prototype)
+        self.get_uncer  = nn.Conv2d(nb_prototype, 1, 1)
+        # }
 
     def forward(self, x_l=None, target_l=None, target_l_subcls=None, x_ul=None, target_ul=None,
                 curr_iter=None, epoch=None, gpu=None, gt_l=None, ul1=None, br1=None, ul2=None, br2=None, flip=None):
@@ -350,11 +350,6 @@ class USRN(BaseModel):
             
             if epoch < self.epoch_start_unsup:
                 return self.total_loss, self.curr_losses, outputs
-            
-            # if self.training:
-            #     return final_depth, final_uncer, omega.squeeze(), embedding_
-            # else:
-            #     return final_depth, torch.sigmoid(final_uncer)
             
             x_w = x_ul[:, 0, :, :, :]  # Weak Aug; x_ul: [batch_size, 2, 3, H, W]
             x_s = x_ul[:, 1, :, :, :]  # Strong Aug
@@ -381,9 +376,6 @@ class USRN(BaseModel):
             # }
 
             return self.total_loss, self.curr_losses, outputs
-            #{
-            # return self.total_loss, self.curr_losses, outputs, uncer_sub_s, omega_sub, subembedding_
-            # }
 
         else:
             raise ValueError("No such mode {}".format(self.mode))
