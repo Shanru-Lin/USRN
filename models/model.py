@@ -251,7 +251,8 @@ class Baseline(BaseModel):
         return chain(self.encoder.get_module_params(), self.classifier.parameters())
 
 class USRN(BaseModel):
-    def __init__(self, num_classes, conf, sup_loss=None, ignore_index=None, testing=False, pretrained=True, num_features=512, nb_prototype = 80):
+    def __init__(self, num_classes, conf, sup_loss=None, ignore_index=None, testing=False, pretrained=True,
+                 num_features=512, nb_prototype = 80):
         super(USRN, self).__init__()
         assert int(conf['supervised']) + int(conf['semi']) == 1, 'one mode only'
         if conf['supervised']:
