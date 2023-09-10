@@ -32,7 +32,9 @@ def main(gpu, ngpus_per_node, config, resume, test, save_feature):
         train_logger = Logger()
     else:
         train_logger = None
-
+    # {
+    os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3'
+    # }
     config['rank'] = gpu + ngpus_per_node * config['n_node']
 
     torch.cuda.set_device(gpu)
@@ -193,7 +195,15 @@ def find_free_port():
 if __name__ == '__main__':
     # PARSE THE ARGS
     parser = argparse.ArgumentParser(description='PyTorch Training')
-    parser.add_argument('-c', '--config', default='configs/config.json', type=str,
+    # parser.add_argument('-c', '--config', default='configs/config.json', type=str,
+    #                     help='Path to the config file')
+    # parser.add_argument('-r', '--resume', default=None, type=str,
+    #                     help='Path to the .pth model checkpoint to resume training')
+    # parser.add_argument('-t', '--test', default=False, type=bool,
+    #                     help='whether to test')
+    # parser.add_argument('-sf', '--save_feature', default=False, type=bool,
+    #                     help='whether to test')
+    parser.add_argument('-c', '--config', default='configs/voc_1over32_usrn.json', type=str,
                         help='Path to the config file')
     parser.add_argument('-r', '--resume', default=None, type=str,
                         help='Path to the .pth model checkpoint to resume training')
@@ -201,14 +211,6 @@ if __name__ == '__main__':
                         help='whether to test')
     parser.add_argument('-sf', '--save_feature', default=False, type=bool,
                         help='whether to test')
-    # parser.add_argument('-c', '--config', default='configs/voc_1over32_baseline.json', type=str,
-    #                     help='Path to the config file')
-    # parser.add_argument('-r', '--resume', default='saved/voc_1over32_baseline/best_model.pth', type=str,
-    #                     help='Path to the .pth model checkpoint to resume training')
-    # parser.add_argument('-t', '--test', default=False, type=bool,
-    #                     help='whether to test')
-    # parser.add_argument('-sf', '--save_feature', default=True, type=bool,
-    #                     help='whether to test')
     args = parser.parse_args()
 
     config = json.load(open(args.config))
