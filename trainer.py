@@ -861,9 +861,9 @@ class Trainer_USRN(BaseTrainer):
                             self.logger.info("epoch:{}, L={:.3f}, Ls={:.3f}, Ls_sub={:.3f}".
                                              format(epoch, total_loss, cur_losses['Ls'], cur_losses['Ls_sub']))
                         else:
-                            self.logger.info("epoch:{}, L={:.3f}, L_task={:.3f}, Ls={:.3f}, Ls_sub={:.3f}, Lu_reg={:.3f}, Lu_sub={:.3f}".
+                            self.logger.info("epoch:{}, L={:.3f}, L_task={:.3f}, Ls={:.3f}, Ls_sub={:.3f}, Lu_reg={:.3f}, Lu_sub={:.3f}, L_uncertainty={:.3f}, L_dissimilar={:.3f}, L_entropy={:.3f}".
                                              format(epoch, total_loss, cur_losses['L_task'], cur_losses['Ls'], cur_losses['Ls_sub'],
-                                                    cur_losses['Lu_reg'], cur_losses['Lu_sub'], ))
+                                                    cur_losses['Lu_reg'], cur_losses['Lu_sub'], cur_losses['L_uncertainty'], cur_losses['L_dissimilar'], cur_losses['L_entropy'],))
 
             if self.gpu == 0:
                 logs = self._log_values(cur_losses)
@@ -947,6 +947,9 @@ class Trainer_USRN(BaseTrainer):
         self.Ls_sub = AverageMeter()
         self.Lu_reg = AverageMeter()
         self.Lu_sub = AverageMeter()
+        self.L_uncertainty = AverageMeter()
+        self.L_dissimilar = AverageMeter()
+        self.L_entropy = AverageMeter()
         self.total_inter_l, self.total_union_l = 0, 0
         self.total_correct_l, self.total_label_l = 0, 0
         self.total_inter_ul, self.total_union_ul = 0, 0
@@ -1011,6 +1014,12 @@ class Trainer_USRN(BaseTrainer):
             logs['Lu_reg'] = self.Lu_reg.average
         if "Lu_sub" in cur_losses.keys():
             logs['Lu_sub'] = self.Lu_sub.average
+        if "L_uncertainty" in cur_losses.keys():
+            logs['L_uncertainty'] = self.L_uncertainty.average
+        if "L_dissimilar" in cur_losses.keys():
+            logs['L_dissimilar'] = self.L_dissimilar.average
+        if "L_entropy" in cur_losses.keys():
+            logs['L_entropy'] = self.L_entropy.average
         logs['mIoU_l'] = self.mIoU_l
         if self.mode == 'semi':
             logs['mIoU_ul'] = self.mIoU_ul
