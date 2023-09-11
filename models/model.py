@@ -279,8 +279,9 @@ class USRN(BaseModel):
         self.loss_weight_unsup = conf['loss_weight_unsup']
         # {
         # self.loss_weight_uncer_relevant = conf['loss_weight_uncer_relevant']
-        self.loss_weight_uncer_relevant = 0.1
-        self.loss_weight_dis_and_entro = 1
+        self.loss_weight_uncer = 0.05
+        self.loss_weight_dis = 0.1
+        self.loss_weight_entro = 1
         # }
         ### VOC Dataset
         if conf['n_labeled_examples'] == 662:
@@ -396,7 +397,7 @@ class USRN(BaseModel):
             self.curr_losses['L_uncertainty'] = self.uncertainty_loss(uncer_sub_s, logits_SubCls_s, logits_SubCls_w)
             self.curr_losses['L_dissimilar'] = self.dissimilar_loss(omega_sub)
             self.curr_losses['L_entropy'] = self.entropy_loss(subembedding_)
-            self.total_loss = self.total_loss +  self.loss_weight_uncer_relevant * (self.curr_losses['L_uncertainty'] + self.loss_weight_dis_and_entro * (self.curr_losses['L_dissimilar'] + self.curr_losses['L_entropy']))
+            self.total_loss = self.total_loss +  self.loss_weight_uncer * self.curr_losses['L_uncertainty'] + self.loss_weight_dis * self.curr_losses['L_dissimilar'] + self.loss_weight_entro * self.curr_losses['L_entropy']
             # }
             #  a*(uncer + b*(en+dis))
             # task + a*uncer + b*(en+dis)

@@ -858,8 +858,9 @@ class Trainer_USRN(BaseTrainer):
                                          format(epoch, total_loss, cur_losses['Ls'], cur_losses['Ls_sub']))
                     else:
                         if epoch -1 < self.epoch_start_unsup:
-                            self.logger.info("epoch:{}, L={:.3f}, Ls={:.3f}, Ls_sub={:.3f}".
-                                             format(epoch, total_loss, cur_losses['Ls'], cur_losses['Ls_sub']))
+                            self.logger.info("epoch:{}, L={:.3f}, L_task={:.3f}, Ls={:.3f}, Ls_sub={:.3f}, Lu_reg={:.3f}, Lu_sub={:.3f}, L_uncertainty={:.3f}, L_dissimilar={:.3f}, L_entropy={:.3f}".
+                                             format(epoch, total_loss, cur_losses['L_task'], cur_losses['Ls'], cur_losses['Ls_sub'],
+                                                    cur_losses['Lu_reg'], cur_losses['Lu_sub'], cur_losses['L_uncertainty'], cur_losses['L_dissimilar'], cur_losses['L_entropy'],))
                         else:
                             self.logger.info("epoch:{}, L={:.3f}, L_task={:.3f}, Ls={:.3f}, Ls_sub={:.3f}, Lu_reg={:.3f}, Lu_sub={:.3f}, L_uncertainty={:.3f}, L_dissimilar={:.3f}, L_entropy={:.3f}".
                                              format(epoch, total_loss, cur_losses['L_task'], cur_losses['Ls'], cur_losses['Ls_sub'],
