@@ -398,7 +398,8 @@ class USRN(BaseModel):
             self.curr_losses['L_entropy'] = self.entropy_loss(subembedding_)
             self.total_loss = self.total_loss +  self.loss_weight_uncer_relevant * (self.curr_losses['L_uncertainty'] + self.loss_weight_dis_and_entro * (self.curr_losses['L_dissimilar'] + self.curr_losses['L_entropy']))
             # }
-
+            #  a*(uncer + b*(en+dis))
+            # task + a*uncer + b*(en+dis)
             return self.total_loss, self.curr_losses, outputs
 
         else:
