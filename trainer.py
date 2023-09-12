@@ -871,7 +871,10 @@ class Trainer_USRN(BaseTrainer):
 
                 if batch_idx % self.log_step == 0:
                     self.wrt_step = (epoch - 1) * len(self.unsupervised_loader) + batch_idx
-                    self._write_scalars_tb(logs)
+                    #{
+                    # self._write_scalars_tb(logs)
+                    self._write_scalars_tb(logs, epoch)
+                    #}
 
                 descrip = 'T ({}) | '.format(epoch)
                 for key in cur_losses:
@@ -932,10 +935,11 @@ class Trainer_USRN(BaseTrainer):
                     tbar.set_description('EVAL ({}) | Loss: {:.3f}, Mean IoU: {:.2f} |'.format(epoch, total_loss_val.average,100*mIoU))
             if self.gpu == 0:
                 self.wrt_step = (epoch) * len(self.val_loader)
-                self.writer.add_scalar(f'{self.wrt_mode}/loss', total_loss_val.average, self.wrt_step)
+                #{
+                self.writer.add_scalar(f'{self.wrt_mode}/loss', total_loss_val.average, epoch)
                 for k, v in list(seg_metrics.items())[:-1]:
-                    self.writer.add_scalar(f'{self.wrt_mode}/{k}', v, self.wrt_step)
-
+                    self.writer.add_scalar(f'{self.wrt_mode}/{k}', v, epoch)
+                #}
             log = {
                 'val_loss': np.round(total_loss_val.average,3),
                 **seg_metrics
@@ -1026,9 +1030,16 @@ class Trainer_USRN(BaseTrainer):
             logs['mIoU_ul'] = self.mIoU_ul
             logs['mIoU_ul_reg'] = self.mIoU_ul_reg
         return logs
-
-    def _write_scalars_tb(self, logs):
+    
+    #{
+    def _write_scalars_tb(self, logs, epoch): 
+    # def _write_scalars_tb(self, logs): 
+        # for k, v in logs.items():
+        #     if 'class_iou' not in k: self.writer.add_scalar(f'train/{k}', v, self.wrt_step)
+        # for i, opt_group in enumerate(self.optimizer.param_groups):
+        #     self.writer.add_scalar(f'train/Learning_rate_{i}', opt_group['lr'], self.wrt_step)
         for k, v in logs.items():
-            if 'class_iou' not in k: self.writer.add_scalar(f'train/{k}', v, self.wrt_step)
+            if 'class_iou' not in k: self.writer.add_scalar(f'train/{k}', v, epoch)
         for i, opt_group in enumerate(self.optimizer.param_groups):
-            self.writer.add_scalar(f'train/Learning_rate_{i}', opt_group['lr'], self.wrt_step)
+            self.writer.add_scalar(f'train/Learning_rate_{i}', opt_group['lr'], epoch)
+        #}
