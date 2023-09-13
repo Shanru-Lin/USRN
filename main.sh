@@ -15,3 +15,5 @@ python3 main.py --config configs/${data}_usrn.json
 # python3 main.py --save_feature True --resume saved/voc_1over32_baseline/best_model.pth --config configs/voc_1over32_baseline.json
 # python3 clustering.py --config configs/voc_1over32_baseline.json --clustering_algorithm normal_kmeans
 # python3 main.py --config configs/voc_1over32_usrn.json
+# testing usrn:
+# python3 main.py --test True --resume pretrained/best_model_voc_1over32_usrn.pth --config configs/voc_1over32_usrn.json

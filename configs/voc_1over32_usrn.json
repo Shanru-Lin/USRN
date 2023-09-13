@@ -19,6 +19,9 @@
     "model":{
         "loss_weight_subcls": 1.0,
         "loss_weight_unsup": 1.0,
+        "loss_weight_uncer_relevent": 0.5,
+        "loss_weight_dis_and_entro": 1.0,
+        "nb_prototype": 300,
         "supervised": false,
         "semi": true,
         "epoch_start_unsup": 0,

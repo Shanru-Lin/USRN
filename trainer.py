@@ -919,7 +919,6 @@ class Trainer_USRN(BaseTrainer):
                 output = output[:, :, :H, :W]
                 # LOSS
                 loss = F.cross_entropy(output, target, ignore_index=self.ignore_index)
-                    # for F.cross_entropy, output should be logits and target should be labels
                 total_loss_val.update(loss.item())
 
                 # eval_metrics has already implemented DDP synchronized

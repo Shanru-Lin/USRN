@@ -256,7 +256,7 @@ class Baseline(BaseModel):
 
 class USRN(BaseModel):
     def __init__(self, num_classes, conf, sup_loss=None, ignore_index=None, testing=False, pretrained=True,
-                 num_features=256, nb_prototype=300):
+                 num_features=256):
         super(USRN, self).__init__()
         assert int(conf['supervised']) + int(conf['semi']) == 1, 'one mode only'
         if conf['supervised']:
@@ -278,9 +278,9 @@ class USRN(BaseModel):
         self.loss_weight_subcls = conf['loss_weight_subcls']
         self.loss_weight_unsup = conf['loss_weight_unsup']
         # {
-        # self.loss_weight_uncer_relevant = conf['loss_weight_uncer_relevant']
-        self.loss_weight_uncer_relevent = 0.1
-        self.loss_weight_dis_and_entro = 1
+        self.loss_weight_uncer_relevent = conf['loss_weight_uncer_relevent']
+        self.loss_weight_dis_and_entro = conf['loss_weight_dis_and_entro']
+        self.nb_prototype = conf['nb_prototype']
         # }
         ### VOC Dataset
         if conf['n_labeled_examples'] == 662:
@@ -315,7 +315,7 @@ class USRN(BaseModel):
                                                    nn.Conv2d(256, self.num_classes_subcls, kernel_size=1, stride=1))
             #{
             self.classifier_SubCls_dm = nn.Sequential(nn.Dropout(0.1),
-                                                   nn.Conv2d(nb_prototype, self.num_classes_subcls, kernel_size=1, stride=1))
+                                                   nn.Conv2d(self.nb_prototype, self.num_classes_subcls, kernel_size=1, stride=1))
             for m in self.classifier_SubCls_dm.modules():
                 if isinstance(m, nn.Conv2d):
                     torch.nn.init.kaiming_normal_(m.weight)
@@ -350,10 +350,10 @@ class USRN(BaseModel):
         self.curr_losses = {}
 
         # {
-        self.DMlayer = Distanceminimi_Layer_learned(in_features=(num_features), out_features=nb_prototype,
+        self.DMlayer = Distanceminimi_Layer_learned(in_features=(num_features), out_features=self.nb_prototype,
                                                     dist='cos')
-        self.DMBN = nn.BatchNorm2d(nb_prototype)
-        self.get_uncer = nn.Conv2d(nb_prototype, self.num_classes_subcls, 1)
+        self.DMBN = nn.BatchNorm2d(self.nb_prototype)
+        self.get_uncer = nn.Conv2d(self.nb_prototype, self.num_classes_subcls, 1)
         # }
 
     def forward(self, x_l=None, target_l=None, target_l_subcls=None, x_ul=None, target_ul=None,
