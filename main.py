@@ -77,11 +77,12 @@ def main(gpu, ngpus_per_node, config, resume, test, save_feature):
     iter_per_epoch = int(config['n_labeled_examples'] / config['train_supervised']['batch_size'])
     config['trainer']['iter_per_epoch'] = iter_per_epoch
     number_early_stop = config['trainer']['early_stop']
-    #{
-    # number_epochs = config['trainer']['epochs'] # in voc_1over32_usrn config, original config['trainer']['epochs'] = 480
-    # config['trainer']['epochs'] = int(config['num_images_all'] / config['n_labeled_examples']) * number_epochs
-    #}
-    config['trainer']['early_stop'] = int(config['num_images_all'] / config['n_labeled_examples']) * number_early_stop
+    
+    if config['name'] == 'USRN':
+        config['trainer']['early_stop'] = int(config['num_images_all'] / config['n_labeled_examples']) * number_early_stop
+    else:
+        number_epochs = config['trainer']['epochs'] # in voc_1over32_usrn config, original config['trainer']['epochs'] = 480
+        config['trainer']['epochs'] = int(config['num_images_all'] / config['n_labeled_examples']) * number_epochs
 
     if test:
         if config['dataset'] == 'voc':
