@@ -795,6 +795,7 @@ class Trainer_USRN(BaseTrainer):
         self.start_time = time.time()
 
         self.epoch_start_unsup = config['model']['epoch_start_unsup']
+        self.parent_uncer_calc = config['model']['parent_uncer_calc']
 
     def _train_epoch(self, epoch):
         if self.gpu == 0:
@@ -857,14 +858,14 @@ class Trainer_USRN(BaseTrainer):
                         self.logger.info("epoch:{}, L={:.3f}, Ls={:.3f}, Ls_sub={:.3f}".
                                          format(epoch, total_loss, cur_losses['Ls'], cur_losses['Ls_sub']))
                     else:
-                        if epoch -1 < self.epoch_start_unsup:
-                            self.logger.info("epoch:{}, L={:.3f}, L_task={:.3f}, Ls={:.3f}, Ls_sub={:.3f}, Lu_reg={:.3f}, Lu_sub={:.3f}, L_uncertainty={:.3f}, L_dissimilar={:.3f}, L_entropy={:.3f}".
-                                             format(epoch, total_loss, cur_losses['L_task'], cur_losses['Ls'], cur_losses['Ls_sub'],
-                                                    cur_losses['Lu_reg'], cur_losses['Lu_sub'], cur_losses['L_uncertainty'], cur_losses['L_dissimilar'], cur_losses['L_entropy'],))
+                        if self.parent_uncer_calc: 
+                                self.logger.info("epoch:{}, L={:.3f}, L_task={:.3f}, Ls={:.3f}, Ls_sub={:.3f}, Lu_reg={:.3f}, Lu_sub={:.3f}, L_uncertainty_sub={:.3f}, L_dissimilar_sub={:.3f}, L_entropy_sub={:.3f}, L_uncertainty_parent={:.3f}, L_dissimilar_parent={:.3f}, L_entropy_parent={:.3f}".
+                                                format(epoch, total_loss, cur_losses['L_task'], cur_losses['Ls'], cur_losses['Ls_sub'], cur_losses['Lu_reg'], cur_losses['Lu_sub'], 
+                                                        cur_losses['L_uncertainty_sub'], cur_losses['L_dissimilar_sub'], cur_losses['L_entropy_sub'], cur_losses['L_uncertainty_parent'], cur_losses['L_dissimilar_parent'], cur_losses['L_entropy_parent']))
                         else:
-                            self.logger.info("epoch:{}, L={:.3f}, L_task={:.3f}, Ls={:.3f}, Ls_sub={:.3f}, Lu_reg={:.3f}, Lu_sub={:.3f}, L_uncertainty={:.3f}, L_dissimilar={:.3f}, L_entropy={:.3f}".
-                                             format(epoch, total_loss, cur_losses['L_task'], cur_losses['Ls'], cur_losses['Ls_sub'],
-                                                    cur_losses['Lu_reg'], cur_losses['Lu_sub'], cur_losses['L_uncertainty'], cur_losses['L_dissimilar'], cur_losses['L_entropy'],))
+                                self.logger.info("epoch:{}, L={:.3f}, L_task={:.3f}, Ls={:.3f}, Ls_sub={:.3f}, Lu_reg={:.3f}, Lu_sub={:.3f}, L_uncertainty_sub={:.3f}, L_dissimilar_sub={:.3f}, L_entropy_sub={:.3f}".
+                                                format(epoch, total_loss, cur_losses['L_task'], cur_losses['Ls'], cur_losses['Ls_sub'], cur_losses['Lu_reg'], cur_losses['Lu_sub'], 
+                                                        cur_losses['L_uncertainty_sub'], cur_losses['L_dissimilar_sub'], cur_losses['L_entropy_sub']))
 
             if self.gpu == 0:
                 logs = self._log_values(cur_losses)
@@ -949,11 +950,15 @@ class Trainer_USRN(BaseTrainer):
         self.L_task = AverageMeter()
         self.Ls = AverageMeter()
         self.Ls_sub = AverageMeter()
-        self.Lu_reg = AverageMeter()
+        self.Lu = AverageMeter()
         self.Lu_sub = AverageMeter()
-        self.L_uncertainty = AverageMeter()
-        self.L_dissimilar = AverageMeter()
-        self.L_entropy = AverageMeter()
+        self.Lu_reg = AverageMeter()
+        self.L_uncertainty_sub = AverageMeter()
+        self.L_dissimilar_sub = AverageMeter()
+        self.L_entropy_sub = AverageMeter()
+        self.L_uncertainty_parent = AverageMeter()
+        self.L_dissimilar_parent = AverageMeter()
+        self.L_entropy_parent = AverageMeter()
         self.total_inter_l, self.total_union_l = 0, 0
         self.total_correct_l, self.total_label_l = 0, 0
         self.total_inter_ul, self.total_union_ul = 0, 0
@@ -1017,13 +1022,19 @@ class Trainer_USRN(BaseTrainer):
         if "Lu_reg" in cur_losses.keys():
             logs['Lu_reg'] = self.Lu_reg.average
         if "Lu_sub" in cur_losses.keys():
-            logs['Lu_sub'] = self.Lu_sub.average
-        if "L_uncertainty" in cur_losses.keys():
-            logs['L_uncertainty'] = self.L_uncertainty.average
-        if "L_dissimilar" in cur_losses.keys():
-            logs['L_dissimilar'] = self.L_dissimilar.average
-        if "L_entropy" in cur_losses.keys():
-            logs['L_entropy'] = self.L_entropy.average
+            logs['Lu_sub'] = self.Lu_sub.average 
+        if "L_uncertainty_sub" in cur_losses.keys():
+            logs['L_uncertainty_sub'] = self.L_uncertainty_sub.average
+        if "L_dissimilar_sub" in cur_losses.keys():
+            logs['L_dissimilar_sub'] = self.L_dissimilar_sub.average
+        if "L_entropy_sub" in cur_losses.keys():
+            logs['L_entropy_sub'] = self.L_entropy_sub.average
+        if "L_uncertainty_parent" in cur_losses.keys():
+            logs['L_uncertainty_parent'] = self.L_uncertainty_parent.average
+        if "L_dissimilar_parent" in cur_losses.keys():
+            logs['L_dissimilar_parent'] = self.L_dissimilar_parent.average
+        if "L_entropy_parent" in cur_losses.keys():
+            logs['L_entropy_parent'] = self.L_entropy_parent.average
         logs['mIoU_l'] = self.mIoU_l
         if self.mode == 'semi':
             logs['mIoU_ul'] = self.mIoU_ul

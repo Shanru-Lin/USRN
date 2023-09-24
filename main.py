@@ -3,6 +3,8 @@ import numpy as np
 import os
 import json
 import argparse
+
+
 import torch
 import dataloaders
 import models
@@ -28,13 +30,14 @@ def get_instance(module, name, config, *args):
    
 
 def main(gpu, ngpus_per_node, config, resume, test, save_feature):
+
     if gpu == 0:
         train_logger = Logger()
     else:
         train_logger = None
-    # {
-    os.environ['CUDA_VISIBLE_DEVICES'] = '6,7'
-    # }
+
+    os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3'
+
     config['rank'] = gpu + ngpus_per_node * config['n_node']
 
     torch.cuda.set_device(gpu)
@@ -78,7 +81,7 @@ def main(gpu, ngpus_per_node, config, resume, test, save_feature):
     config['trainer']['iter_per_epoch'] = iter_per_epoch
     number_early_stop = config['trainer']['early_stop']
     #{
-    # number_epochs = config['trainer']['epochs'] # in voc_1over32_usrn config, original config['trainer']['epochs'] = 480
+    # number_epochs = config['trainer']['epochs'] # in voc_1over32_usrn config, original config['trainer']['epochs'] = 80
     # config['trainer']['epochs'] = int(config['num_images_all'] / config['n_labeled_examples']) * number_epochs
     #}
     config['trainer']['early_stop'] = int(config['num_images_all'] / config['n_labeled_examples']) * number_early_stop

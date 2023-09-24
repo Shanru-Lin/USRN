@@ -1,8 +1,8 @@
 {
     "name": "USRN",
-    "experim_name": "voc_1over32_usrn",
+    "experim_name": "voc_1over32_usrn_plusParent",
     "n_labeled_examples": 331,
-    "n_gpu": 2,
+    "n_gpu": 4,
     "num_images_all": 10582,
     "dataset": "voc",
     "label_subcls": "./saved/voc_1over32_baseline/label_subcls_normal_kmeans",
@@ -19,9 +19,12 @@
     "model":{
         "loss_weight_subcls": 1.0,
         "loss_weight_unsup": 1.0,
-        "loss_weight_uncer_relevent": 0.5,
+        "loss_weight_uncer_relevent": 0.15,
         "loss_weight_dis_and_entro": 1.0,
-        "nb_prototype": 300,
+        "num_feature": 256,
+        "nb_prototype": 400,
+        "parent_uncer_calc": true,
+        "loss_weight_parent_uncer_relevent": 1.0,
         "supervised": false,
         "semi": true,
         "epoch_start_unsup": 0,
@@ -75,7 +78,7 @@
     },
 
     "val_loader": {
-        "batch_size": 2,
+        "batch_size": 8,
         "val": true,
         "split": "val",
         "shuffle": false,
@@ -83,7 +86,7 @@
     },
 
     "trainer": {
-        "epochs": 80,
+        "epochs": 1400,
         "early_stop": 100,
         "save_dir": "saved/",
         "save_period": 1,

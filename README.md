@@ -54,6 +54,7 @@ python3 main.py --test True --resume pretrained/best_model_voc_1over32_baseline.
 ```bash
 python3 main.py --test True --resume pretrained/best_model_voc_1over32_usrn.pth --config configs/voc_1over32_usrn.json
 ```
+<!-- python3 main.py --test True --resume saved/voc_1over32_usrn_uncer0.15/best_model.pth --config saved/voc_1over32_usrn_uncer0.15/config.json -->
 
 ### Training and Testing
 * USRN (1/32 split of PASCAL VOC): 
