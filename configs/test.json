@@ -1,6 +1,6 @@
 {
     "name": "USRN",
-    "experim_name": "voc_1over32_usrn_plusParent",
+    "experim_name": "voc_1over32_usrn_test",
     "n_labeled_examples": 331,
     "n_gpu": 4,
     "num_images_all": 10582,

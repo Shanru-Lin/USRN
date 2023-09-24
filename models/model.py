@@ -300,7 +300,7 @@ class USRN(BaseModel):
             self.split_list = [45, 7, 28, 1, 2, 2, 1, 1, 20, 2, 5, 2, 1, 8, 1, 1, 1, 1, 1]
         elif conf['n_labeled_examples'] == 93:
             self.split_list = [38, 6, 22, 1, 2, 2, 1, 1, 17, 2, 5, 1, 1, 7, 1, 1, 1, 1, 1]
-        self.num_classes_subcls = sum(self.split_list) # for voc331, num_classes_subcls=177
+        self.num_classes_sub = sum(self.split_list) # for voc331, num_classes_subcls=177
 
         if self.backbone == 'deeplab_v3+':
             self.encoder = Deeplab_SubCls(backbone='resnet{}'.format(self.layers))
@@ -328,10 +328,10 @@ class USRN(BaseModel):
                     m.bias.data.zero_()
            
             self.classifier_SubCls = nn.Sequential(nn.Dropout(0.1),
-                                                   nn.Conv2d(256, self.num_classes_subcls, kernel_size=1, stride=1))
+                                                   nn.Conv2d(256, self.num_classes_sub, kernel_size=1, stride=1))
             #{
             self.classifier_SubCls_dm = nn.Sequential(nn.Dropout(0.1),
-                                                   nn.Conv2d(self.nb_prototype, self.num_classes_subcls, kernel_size=1, stride=1))
+                                                   nn.Conv2d(self.nb_prototype, self.num_classes_sub, kernel_size=1, stride=1))
             for m in self.classifier_SubCls_dm.modules():
                 if isinstance(m, nn.Conv2d):
                     torch.nn.init.kaiming_normal_(m.weight)
@@ -369,7 +369,8 @@ class USRN(BaseModel):
         self.DMlayer = Distanceminimi_Layer_learned(in_features=self.num_features, out_features=self.nb_prototype,
                                                     dist='cos')
         self.DMBN = nn.BatchNorm2d(self.nb_prototype)
-        self.get_uncer = nn.Conv2d(self.nb_prototype, self.num_classes_subcls, 1)
+        self.get_uncer_parent = nn.Conv2d(self.nb_prototype, self.num_classes, 1)
+        self.get_uncer_sub = nn.Conv2d(self.nb_prototype, self.num_classes_sub, 1)
         # }
 
     def forward(self, x_l=None, target_l=None, target_l_subcls=None, x_ul=None, target_ul=None,
@@ -393,11 +394,19 @@ class USRN(BaseModel):
             x_s = x_ul[:, 1, :, :, :]  # Strong Aug
 
             logits_w, logits_SubCls_w = self.get_logits(x_w)
+            if gpu==0:
+                print(logits_w.size())
+                print(logits_SubCls_w.size())
             # {
             # logits_s, logits_SubCls_s = self.get_logits(x_s)
 
             if self.parent_uncer_calc:
                 logits_s, logits_SubCls_s, uncer_parent_s, uncer_sub_s, omega_parent, omega_sub, parentembedding_, subembedding_ = self.get_logits_and_both_uncer(x_s)
+                if gpu == 0:
+                    print(logits_s.size())
+                    print(logits_SubCls_s.size())
+                    print(uncer_parent_s.size())
+                    print(uncer_sub_s.size())
             else:
                 logits_s, logits_SubCls_s, uncer_sub_s, omega_sub, subembedding_ = self.get_logits_and_uncer(x_s)
             
@@ -518,14 +527,14 @@ class USRN(BaseModel):
         parentembedding_, omega_parent = self.DMlayer(feat)
         parentembedding = torch.exp(-parentembedding_)
         out_feat_parent = self.DMBN(parentembedding)
-        uncer_parent = self.get_uncer(out_feat_parent)
+        uncer_parent = self.get_uncer_parent(out_feat_parent)
         logits = self.classifier_dm(out_feat_parent)
 
         # sub class
         subembedding_, omega_sub = self.DMlayer(feat_SubCls)
         subembedding = torch.exp(-subembedding_)
         out_feat_sub = self.DMBN(subembedding)
-        uncer_sub = self.get_uncer(out_feat_sub)
+        uncer_sub = self.get_uncer_sub(out_feat_sub)
         logits_SubCls = self.classifier_SubCls_dm(out_feat_sub)
 
         return logits, logits_SubCls, uncer_parent, uncer_sub, omega_parent.squeeze(), omega_sub.squeeze(), parentembedding_, subembedding_

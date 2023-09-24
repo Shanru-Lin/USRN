@@ -166,8 +166,12 @@ def main(conf, clustering_algorithm):
                     print("feats saved")
 
                     #{original command}
+                    # command = "regularized-k-means/build/regularized-k-means hard "+ save_folder + "/subfeats_cls" + str(cls) + "_n" + str(num_clusters) + ".csv " + str(num_clusters) + \
+                    #           " -a " + save_folder + "/subfeats_cls" + str(cls) + "_n" + str(num_clusters) + "_hard_assignments -o"+ save_folder + "/subfeats_cls" + str(cls) + "_n" + str(num_clusters) + "_hard_summary.txt -t 20"
                     command = "regularized-k-means/build/regularized-k-means hard "+ save_folder + "/subfeats_cls" + str(cls) + "_n" + str(num_clusters) + ".csv " + str(num_clusters) + \
-                              " -a " + save_folder + "/subfeats_cls" + str(cls) + "_n" + str(num_clusters) + "_hard_assignments -o "+ save_folder + "/subfeats_cls" + str(cls) + "_n" + str(num_clusters) + "_hard_summary.txt -t-1"
+                              " -a " + save_folder + "/subfeats_cls" + str(cls) + "_n" + str(num_clusters) + "_hard_assignments -o"+ save_folder + "/subfeats_cls" + str(cls) + "_n" + str(num_clusters) + "_hard_summary.txt -t20"
+                    # command = "regularized-k-means/build/regularized-k-means hard "+ save_folder + "/subfeats_cls" + str(cls) + "_n" + str(num_clusters) + ".csv " + str(num_clusters) + \
+                    #           " -a " + save_folder + "/subfeats_cls" + str(cls) + "_n" + str(num_clusters) + "_hard_assignments -o "+ save_folder + "/subfeats_cls" + str(cls) + "_n" + str(num_clusters) + "_hard_summary.txt -t-1"
                     print(command)
                     os.system(command)
 
