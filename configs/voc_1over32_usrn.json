@@ -1,8 +1,8 @@
 {
     "name": "USRN",
-    "experim_name": "voc_1over32_usrn_parent",
+    "experim_name": "voc_1over32_usrn_debug",
     "n_labeled_examples": 331,
-    "n_gpu": 4,
+    "n_gpu": 2,
     "num_images_all": 10582,
     "dataset": "voc",
     "label_subcls": "./saved/voc_1over32_baseline/label_subcls_normal_kmeans",
@@ -24,8 +24,9 @@
         "num_feature_parent": 256,
         "num_feature_sub": 256,
         "nb_prototype_parent": 60,
-        "nb_prototype_sub": 380,
-        "parent_uncer_calc": true,
+        "nb_prototype_sub": 64,
+        "parent_uncer_calc": false,
+        "sub_uncer_calc": true,
         "loss_weight_parent_uncer_relevent": 1.0,
         "supervised": false,
         "semi": true,
@@ -80,7 +81,7 @@
     },
 
     "val_loader": {
-        "batch_size": 4,
+        "batch_size": 2,
         "val": true,
         "split": "val",
         "shuffle": false,

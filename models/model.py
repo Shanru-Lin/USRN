@@ -233,7 +233,7 @@ class Baseline(BaseModel):
             return total_loss, curr_losses, outputs
         else:
             raise ValueError("No such mode {}".format(self.mode))
-
+    
     def concat_all_gather(self, tensor):
         """
         Performs all_gather operation on the provided tensors.
@@ -253,7 +253,7 @@ class Baseline(BaseModel):
     def get_other_params(self):
         return chain(self.encoder.get_module_params(), self.classifier.parameters())
 
-
+    
 class USRN(BaseModel):
     def __init__(self, num_classes, conf, sup_loss=None, ignore_index=None, testing=False, pretrained=True):
         super(USRN, self).__init__()
@@ -286,6 +286,7 @@ class USRN(BaseModel):
         self.num_features_sub = conf['num_feature_sub']
 
         self.parent_uncer_calc = conf['parent_uncer_calc']
+        self.sub_uncer_calc = conf['sub_uncer_calc']
         self.loss_weight_parent_uncer_relevent = conf['loss_weight_parent_uncer_relevent']
         # }
 
@@ -334,17 +335,18 @@ class USRN(BaseModel):
             self.classifier_SubCls = nn.Sequential(nn.Dropout(0.1),
                                                    nn.Conv2d(256, self.num_classes_sub, kernel_size=1, stride=1))
             #{
-            self.classifier_SubCls_dm = nn.Sequential(nn.Dropout(0.1),
-                                                   nn.Conv2d(self.nb_prototype_sub, self.num_classes_sub, kernel_size=1, stride=1))
-            for m in self.classifier_SubCls_dm.modules():
-                if isinstance(m, nn.Conv2d):
-                    torch.nn.init.kaiming_normal_(m.weight)
-                elif isinstance(m, nn.BatchNorm2d):
-                    m.weight.data.fill_(1)
-                    m.bias.data.zero_()
-                elif isinstance(m, nn.SyncBatchNorm):
-                    m.weight.data.fill_(1)
-                    m.bias.data.zero_()
+            if self.sub_uncer_calc:
+                self.classifier_SubCls_dm = nn.Sequential(nn.Dropout(0.1),
+                                                    nn.Conv2d(self.nb_prototype_sub, self.num_classes_sub, kernel_size=1, stride=1))
+                for m in self.classifier_SubCls_dm.modules():
+                    if isinstance(m, nn.Conv2d):
+                        torch.nn.init.kaiming_normal_(m.weight)
+                    elif isinstance(m, nn.BatchNorm2d):
+                        m.weight.data.fill_(1)
+                        m.bias.data.zero_()
+                    elif isinstance(m, nn.SyncBatchNorm):
+                        m.weight.data.fill_(1)
+                        m.bias.data.zero_()
             #}
             for m in self.classifier_SubCls.modules():
                 if isinstance(m, nn.Conv2d):
@@ -370,12 +372,15 @@ class USRN(BaseModel):
         self.curr_losses = {}
 
         # {
-        self.DMlayer_sub = Distanceminimi_Layer_learned(in_features=self.num_features_sub, out_features=self.nb_prototype_sub,
-                                                    dist='cos')
-        self.DMBN_sub = nn.BatchNorm2d(self.nb_prototype_sub)
-        self.get_uncer_sub = nn.Conv2d(self.nb_prototype_sub, self.num_classes_sub, 1)
+        if self.sub_uncer_calc:
+            self.conv1x1_sub = nn.Conv2d(256, self.num_features_sub, kernel_size=1, stride=1, padding=0)
+            self.DMlayer_sub = Distanceminimi_Layer_learned(in_features=self.num_features_sub, out_features=self.nb_prototype_sub,
+                                                        dist='cos')
+            self.DMBN_sub = nn.BatchNorm2d(self.nb_prototype_sub)
+            self.get_uncer_sub = nn.Conv2d(self.nb_prototype_sub, self.num_classes_sub, 1)
 
         if self.parent_uncer_calc:
+            self.conv1x1_parent = nn.Conv2d(256, self.num_features_parent, kernel_size=1, stride=1, padding=0)
             self.DMlayer_parent = Distanceminimi_Layer_learned(in_features=self.num_features_parent, out_features=self.nb_prototype_parent,
                                                         dist='cos')
             self.DMBN_parent = nn.BatchNorm2d(self.nb_prototype_parent)
@@ -402,16 +407,27 @@ class USRN(BaseModel):
             x_w = x_ul[:, 0, :, :, :]  # Weak Aug; x_ul: [batch_size, 2, 3, H, W]
             x_s = x_ul[:, 1, :, :, :]  # Strong Aug
 
+        #{
+            # weak
             logits_w, logits_SubCls_w = self.get_logits(x_w)
-            # {
-            # logits_s, logits_SubCls_s = self.get_logits(x_s)
 
+            # strong
+                # encoding
+            feat_parent_s, feat_sub_s = self.encoder(x_s)
+            if self.downsample:
+                feat_parent_s = F.avg_pool2d(feat_parent_s, kernel_size=2, stride=2)
+                feat_sub_s = F.avg_pool2d(feat_sub_s, kernel_size=2, stride=2) 
+                # logits and uncer
             if self.parent_uncer_calc:
-                logits_s, logits_SubCls_s, uncer_parent_s, uncer_sub_s, omega_parent, omega_sub, parentembedding_, subembedding_ = self.get_logits_and_both_uncer(x_s)
+                logits_s, uncer_parent, omega_parent, parentembedding_ = self.get_logits_and_uncer_parent(feat_parent_s)
             else:
-                logits_s, logits_SubCls_s, uncer_sub_s, omega_sub, subembedding_ = self.get_logits_and_uncer(x_s)
-            
-            # }
+                logits_s = self.classifier(feat_parent_s)
+            if self.sub_uncer_calc:
+                logits_SubCls_s, uncer_sub, omega_sub, subembedding_ = self.get_logits_and_uncer_sub(feat_sub_s)
+            else: 
+                logits_SubCls_s = self.classifier_SubCls(feat_sub_s)
+
+            # labels
             seg_w_SubCls = F.softmax(logits_SubCls_w, 1)
             pseudo_logits_SubCls_w = seg_w_SubCls.max(1)[
                 0].detach()  # the maximum probability value along the class dimension of seg_w_SubCls for each pixel. # "pseudo-logits" seem to be calculated by taking the maximum probability values from the softmax output, "pseudo" is used here to indicate that these values are not true logits but are derived from probabilities.
@@ -423,24 +439,18 @@ class USRN(BaseModel):
 
             self.curr_losses['L_task'] = self.total_loss
 
-            # {           
+            # uncer relevant loss           
             if self.parent_uncer_calc:
-                self.curr_losses['L_uncertainty_sub'] = self.uncertainty_loss(uncer_sub_s, logits_SubCls_s, logits_SubCls_w)
-                self.curr_losses['L_dissimilar_sub'] = self.dissimilar_loss(omega_sub)
-                self.curr_losses['L_entropy_sub'] = self.entropy_loss(subembedding_)
-                self.total_loss = self.total_loss +  self.loss_weight_uncer_relevent * (self.curr_losses['L_uncertainty_sub'] + self.loss_weight_dis_and_entro * (self.curr_losses['L_dissimilar_sub'] + self.curr_losses['L_entropy_sub']))
-
-                self.curr_losses['L_uncertainty_parent'] = self.uncertainty_loss(uncer_parent_s, logits_s, logits_w)
+                self.curr_losses['L_uncertainty_parent'] = self.uncertainty_loss(uncer_parent, logits_s, logits_w, self.num_classes)
                 self.curr_losses['L_dissimilar_parent'] = self.dissimilar_loss(omega_parent)
                 self.curr_losses['L_entropy_parent'] = self.entropy_loss(parentembedding_)
                 self.total_loss = self.total_loss +  self.loss_weight_parent_uncer_relevent * (self.loss_weight_uncer_relevent * (self.curr_losses['L_uncertainty_parent'] + self.loss_weight_dis_and_entro * (self.curr_losses['L_dissimilar_parent'] + self.curr_losses['L_entropy_parent'])))
-            
-            else:
-                self.curr_losses['L_uncertainty'] = self.uncertainty_loss(uncer_sub_s, logits_SubCls_s, logits_SubCls_w)
-                self.curr_losses['L_dissimilar'] = self.dissimilar_loss(omega_sub)
-                self.curr_losses['L_entropy'] = self.entropy_loss(subembedding_)
-                self.total_loss = self.total_loss +  self.loss_weight_uncer_relevent * (self.curr_losses['L_uncertainty'] + self.loss_weight_dis_and_entro * (self.curr_losses['L_dissimilar'] + self.curr_losses['L_entropy']))
-            # }
+            if self.sub_uncer_calc:
+                self.curr_losses['L_uncertainty_sub'] = self.uncertainty_loss(uncer_sub, logits_SubCls_s, logits_SubCls_w, self.num_classes_sub)
+                self.curr_losses['L_dissimilar_sub'] = self.dissimilar_loss(omega_sub)
+                self.curr_losses['L_entropy_sub'] = self.entropy_loss(subembedding_)
+                self.total_loss = self.total_loss +  self.loss_weight_uncer_relevent * (self.curr_losses['L_uncertainty_sub'] + self.loss_weight_dis_and_entro * (self.curr_losses['L_dissimilar_sub'] + self.curr_losses['L_entropy_sub']))
+        # }
             return self.total_loss, self.curr_losses, outputs
 
         else:
@@ -490,7 +500,7 @@ class USRN(BaseModel):
         self.curr_losses['Lu_reg'] = loss_unsup_reg
         self.total_loss = self.total_loss + loss_unsup_reg * self.loss_weight_unsup
         return
-
+    
     def get_logits(self, x):
         feat, feat_SubCls = self.encoder(x)
         if self.downsample:
@@ -499,54 +509,31 @@ class USRN(BaseModel):
         logits = self.classifier(feat)
         logits_SubCls = self.classifier_SubCls(feat_SubCls)
         return logits, logits_SubCls
-
-    def get_logits_and_uncer(self, x): # only subclass uncertainty
-        feat, feat_SubCls = self.encoder(x)
-        if self.downsample:
-            feat = F.avg_pool2d(feat, kernel_size=2, stride=2)
-            feat_SubCls = F.avg_pool2d(feat_SubCls, kernel_size=2, stride=2)
-        # parent class
-        logits = self.classifier(feat)
-        # sub class
-        subembedding_, omega_sub = self.DMlayer_sub(feat_SubCls)
+    
+    def get_logits_and_uncer_sub(self, feat_sub): 
+        subembedding_, omega_sub = self.DMlayer_sub(feat_sub)
         subembedding = torch.exp(-subembedding_)
         out_feat_sub = self.DMBN_sub(subembedding)
         uncer_sub = self.get_uncer_sub(out_feat_sub)
-        logits_SubCls = self.classifier_SubCls_dm(out_feat_sub)
-        return logits, logits_SubCls, uncer_sub, omega_sub.squeeze(), subembedding_
-        # logits = self.classifier(feat)
-        # logits_SubCls = self.classifier_SubCls(feat_SubCls)
-        # return logits, logits_SubCls
-    
-    def get_logits_and_both_uncer(self, x): # both parent and subclass uncertainty
-        feat, feat_SubCls = self.encoder(x)
-        if self.downsample:
-            feat = F.avg_pool2d(feat, kernel_size=2, stride=2)
-            feat_SubCls = F.avg_pool2d(feat_SubCls, kernel_size=2, stride=2)
+        logits_sub = self.classifier_SubCls_dm(out_feat_sub)
+        return logits_sub, uncer_sub, omega_sub.squeeze(), subembedding_
 
-        # parent class
-        parentembedding_, omega_parent = self.DMlayer_parent(feat)
+    def get_logits_and_uncer_parent(self, feat_parent): 
+        parentembedding_, omega_parent = self.DMlayer_parent(feat_parent)
         parentembedding = torch.exp(-parentembedding_)
         out_feat_parent = self.DMBN_parent(parentembedding)
         uncer_parent = self.get_uncer_parent(out_feat_parent)
-        logits = self.classifier_dm(out_feat_parent)
+        logits_parent = self.classifier_dm(out_feat_parent)
+        return logits_parent, uncer_parent, omega_parent.squeeze(), parentembedding_
 
-        # sub class
-        subembedding_, omega_sub = self.DMlayer_sub(feat_SubCls)
-        subembedding = torch.exp(-subembedding_)
-        out_feat_sub = self.DMBN_sub(subembedding)
-        uncer_sub = self.get_uncer_sub(out_feat_sub)
-        logits_SubCls = self.classifier_SubCls_dm(out_feat_sub)
 
-        return logits, logits_SubCls, uncer_parent, uncer_sub, omega_parent.squeeze(), omega_sub.squeeze(), parentembedding_, subembedding_
-       
-    def uncertainty_loss(self, uncer, outputs, pseudo_gt):
+    def uncertainty_loss(self, uncer, outputs, pseudo_gt, class_num):
         abs_error = abs(outputs.detach() - pseudo_gt)
         #abs_error[abs_error > 1] = 1
         abs_error = abs_error.detach()
         #{
         # loss = nn.CrossEntropyLoss(reduction='mean')(uncer, abs_error)
-        loss = nn.CrossEntropyLoss(reduction='mean')(uncer, abs_error) / self.num_classes
+        loss = nn.CrossEntropyLoss(reduction='mean')(uncer, abs_error) / class_num
         # loss = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([5.0]).cuda(), reduction='mean')(uncer, abs_error)
         # }
         return loss

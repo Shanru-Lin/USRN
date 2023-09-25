@@ -796,6 +796,7 @@ class Trainer_USRN(BaseTrainer):
 
         self.epoch_start_unsup = config['model']['epoch_start_unsup']
         self.parent_uncer_calc = config['model']['parent_uncer_calc']
+        self.sub_uncer_calc = config['model']['sub_uncer_calc']
 
     def _train_epoch(self, epoch):
         if self.gpu == 0:
@@ -858,14 +859,21 @@ class Trainer_USRN(BaseTrainer):
                         self.logger.info("epoch:{}, L={:.3f}, Ls={:.3f}, Ls_sub={:.3f}".
                                          format(epoch, total_loss, cur_losses['Ls'], cur_losses['Ls_sub']))
                     else:
-                        if self.parent_uncer_calc: 
+                        if self.parent_uncer_calc and self.sub_uncer_calc: 
                                 self.logger.info("epoch:{}, L={:.3f}, L_task={:.3f}, Ls={:.3f}, Ls_sub={:.3f}, Lu_reg={:.3f}, Lu_sub={:.3f}, L_uncertainty_sub={:.3f}, L_dissimilar_sub={:.3f}, L_entropy_sub={:.3f}, L_uncertainty_parent={:.3f}, L_dissimilar_parent={:.3f}, L_entropy_parent={:.3f}".
                                                 format(epoch, total_loss, cur_losses['L_task'], cur_losses['Ls'], cur_losses['Ls_sub'], cur_losses['Lu_reg'], cur_losses['Lu_sub'], 
                                                         cur_losses['L_uncertainty_sub'], cur_losses['L_dissimilar_sub'], cur_losses['L_entropy_sub'], cur_losses['L_uncertainty_parent'], cur_losses['L_dissimilar_parent'], cur_losses['L_entropy_parent']))
-                        else:
+                        elif self.sub_uncer_calc: 
                                 self.logger.info("epoch:{}, L={:.3f}, L_task={:.3f}, Ls={:.3f}, Ls_sub={:.3f}, Lu_reg={:.3f}, Lu_sub={:.3f}, L_uncertainty_sub={:.3f}, L_dissimilar_sub={:.3f}, L_entropy_sub={:.3f}".
                                                 format(epoch, total_loss, cur_losses['L_task'], cur_losses['Ls'], cur_losses['Ls_sub'], cur_losses['Lu_reg'], cur_losses['Lu_sub'], 
                                                         cur_losses['L_uncertainty_sub'], cur_losses['L_dissimilar_sub'], cur_losses['L_entropy_sub']))
+                        elif self.parent_uncer_calc: 
+                                self.logger.info("epoch:{}, L={:.3f}, L_task={:.3f}, Ls={:.3f}, Ls_sub={:.3f}, Lu_reg={:.3f}, Lu_sub={:.3f}, L_uncertainty_parent={:.3f}, L_dissimilar_parent={:.3f}, L_entropy_parent={:.3f}".
+                                                format(epoch, total_loss, cur_losses['L_task'], cur_losses['Ls'], cur_losses['Ls_sub'], cur_losses['Lu_reg'], cur_losses['Lu_sub'], 
+                                                        cur_losses['L_uncertainty_parent'], cur_losses['L_dissimilar_parent'], cur_losses['L_entropy_parent']))
+                        else:
+                                self.logger.info("epoch:{}, L={:.3f}, L_task={:.3f}, Ls={:.3f}, Ls_sub={:.3f}, Lu_reg={:.3f}, Lu_sub={:.3f}, L_uncertainty_sub={:.3f}, L_dissimilar_sub={:.3f}, L_entropy_sub={:.3f}".
+                                                format(epoch, total_loss, cur_losses['L_task'], cur_losses['Ls'], cur_losses['Ls_sub'], cur_losses['Lu_reg'], cur_losses['Lu_sub']))
 
             if self.gpu == 0:
                 logs = self._log_values(cur_losses)
