@@ -279,8 +279,11 @@ class USRN(BaseModel):
         # {
         self.loss_weight_uncer_relevent = conf['loss_weight_uncer_relevent']
         self.loss_weight_dis_and_entro = conf['loss_weight_dis_and_entro']
-        self.nb_prototype = conf['nb_prototype']
-        self.num_features = conf['num_feature']
+
+        self.nb_prototype_parent = conf['nb_prototype_parent']
+        self.nb_prototype_sub = conf['nb_prototype_sub']
+        self.num_features_parent = conf['num_feature_parent']
+        self.num_features_sub = conf['num_feature_sub']
 
         self.parent_uncer_calc = conf['parent_uncer_calc']
         self.loss_weight_parent_uncer_relevent = conf['loss_weight_parent_uncer_relevent']
@@ -304,18 +307,19 @@ class USRN(BaseModel):
 
         if self.backbone == 'deeplab_v3+':
             self.encoder = Deeplab_SubCls(backbone='resnet{}'.format(self.layers))
-            self.classifier = nn.Sequential(nn.Dropout(0.1), nn.Conv2d(256, num_classes, kernel_size=1, stride=1))
+            self.classifier = nn.Sequential(nn.Dropout(0.1), nn.Conv2d(256, self.num_classes, kernel_size=1, stride=1))
             #{
-            self.classifier_dm = nn.Sequential(nn.Dropout(0.1), nn.Conv2d(self.nb_prototype, num_classes, kernel_size=1, stride=1))
-            for m in self.classifier_dm.modules():
-                if isinstance(m, nn.Conv2d):
-                    torch.nn.init.kaiming_normal_(m.weight)
-                elif isinstance(m, nn.BatchNorm2d):
-                    m.weight.data.fill_(1)
-                    m.bias.data.zero_()
-                elif isinstance(m, nn.SyncBatchNorm):
-                    m.weight.data.fill_(1)
-                    m.bias.data.zero_()
+            if self.parent_uncer_calc:
+                self.classifier_dm = nn.Sequential(nn.Dropout(0.1), nn.Conv2d(self.nb_prototype_parent, num_classes, kernel_size=1, stride=1))
+                for m in self.classifier_dm.modules():
+                    if isinstance(m, nn.Conv2d):
+                        torch.nn.init.kaiming_normal_(m.weight)
+                    elif isinstance(m, nn.BatchNorm2d):
+                        m.weight.data.fill_(1)
+                        m.bias.data.zero_()
+                    elif isinstance(m, nn.SyncBatchNorm):
+                        m.weight.data.fill_(1)
+                        m.bias.data.zero_()
             #}
             for m in self.classifier.modules():
                 if isinstance(m, nn.Conv2d):
@@ -331,7 +335,7 @@ class USRN(BaseModel):
                                                    nn.Conv2d(256, self.num_classes_sub, kernel_size=1, stride=1))
             #{
             self.classifier_SubCls_dm = nn.Sequential(nn.Dropout(0.1),
-                                                   nn.Conv2d(self.nb_prototype, self.num_classes_sub, kernel_size=1, stride=1))
+                                                   nn.Conv2d(self.nb_prototype_sub, self.num_classes_sub, kernel_size=1, stride=1))
             for m in self.classifier_SubCls_dm.modules():
                 if isinstance(m, nn.Conv2d):
                     torch.nn.init.kaiming_normal_(m.weight)
@@ -366,11 +370,18 @@ class USRN(BaseModel):
         self.curr_losses = {}
 
         # {
-        self.DMlayer = Distanceminimi_Layer_learned(in_features=self.num_features, out_features=self.nb_prototype,
+        self.DMlayer = Distanceminimi_Layer_learned(in_features=self.num_features_sub, out_features=self.nb_prototype_sub,
                                                     dist='cos')
-        self.DMBN = nn.BatchNorm2d(self.nb_prototype)
-        self.get_uncer_parent = nn.Conv2d(self.nb_prototype, self.num_classes, 1)
-        self.get_uncer_sub = nn.Conv2d(self.nb_prototype, self.num_classes_sub, 1)
+        self.DMBN = nn.BatchNorm2d(self.nb_prototype_sub)
+        self.get_uncer_parent = nn.Conv2d(self.nb_prototype_sub, self.num_classes, 1)
+        self.get_uncer_sub = nn.Conv2d(self.nb_prototype_sub, self.num_classes_sub, 1)
+
+        if self.parent_uncer_calc:
+            self.DMlayer_parent = Distanceminimi_Layer_learned(in_features=self.num_features_parent, out_features=self.nb_prototype_parent,
+                                                        dist='cos')
+            self.DMBN_parent = nn.BatchNorm2d(self.nb_prototype_parent)
+            self.get_uncer_parent = nn.Conv2d(self.nb_prototype_parent, self.num_classes, 1)
+            self.get_uncer_sub_parent = nn.Conv2d(self.nb_prototype_parent, self.num_classes_sub, 1)
         # }
 
     def forward(self, x_l=None, target_l=None, target_l_subcls=None, x_ul=None, target_ul=None,
@@ -394,19 +405,11 @@ class USRN(BaseModel):
             x_s = x_ul[:, 1, :, :, :]  # Strong Aug
 
             logits_w, logits_SubCls_w = self.get_logits(x_w)
-            if gpu==0:
-                print(logits_w.size())
-                print(logits_SubCls_w.size())
             # {
             # logits_s, logits_SubCls_s = self.get_logits(x_s)
 
             if self.parent_uncer_calc:
                 logits_s, logits_SubCls_s, uncer_parent_s, uncer_sub_s, omega_parent, omega_sub, parentembedding_, subembedding_ = self.get_logits_and_both_uncer(x_s)
-                if gpu == 0:
-                    print(logits_s.size())
-                    print(logits_SubCls_s.size())
-                    print(uncer_parent_s.size())
-                    print(uncer_sub_s.size())
             else:
                 logits_s, logits_SubCls_s, uncer_sub_s, omega_sub, subembedding_ = self.get_logits_and_uncer(x_s)
             
@@ -523,10 +526,10 @@ class USRN(BaseModel):
             feat = F.avg_pool2d(feat, kernel_size=2, stride=2)
             feat_SubCls = F.avg_pool2d(feat_SubCls, kernel_size=2, stride=2)
 
-        # original class
-        parentembedding_, omega_parent = self.DMlayer(feat)
+        # parent class
+        parentembedding_, omega_parent = self.DMlayer_parent(feat)
         parentembedding = torch.exp(-parentembedding_)
-        out_feat_parent = self.DMBN(parentembedding)
+        out_feat_parent = self.DMBN_parent(parentembedding)
         uncer_parent = self.get_uncer_parent(out_feat_parent)
         logits = self.classifier_dm(out_feat_parent)
 
