@@ -370,10 +370,9 @@ class USRN(BaseModel):
         self.curr_losses = {}
 
         # {
-        self.DMlayer = Distanceminimi_Layer_learned(in_features=self.num_features_sub, out_features=self.nb_prototype_sub,
+        self.DMlayer_sub = Distanceminimi_Layer_learned(in_features=self.num_features_sub, out_features=self.nb_prototype_sub,
                                                     dist='cos')
-        self.DMBN = nn.BatchNorm2d(self.nb_prototype_sub)
-        self.get_uncer_parent = nn.Conv2d(self.nb_prototype_sub, self.num_classes, 1)
+        self.DMBN_sub = nn.BatchNorm2d(self.nb_prototype_sub)
         self.get_uncer_sub = nn.Conv2d(self.nb_prototype_sub, self.num_classes_sub, 1)
 
         if self.parent_uncer_calc:
@@ -381,7 +380,6 @@ class USRN(BaseModel):
                                                         dist='cos')
             self.DMBN_parent = nn.BatchNorm2d(self.nb_prototype_parent)
             self.get_uncer_parent = nn.Conv2d(self.nb_prototype_parent, self.num_classes, 1)
-            self.get_uncer_sub_parent = nn.Conv2d(self.nb_prototype_parent, self.num_classes_sub, 1)
         # }
 
     def forward(self, x_l=None, target_l=None, target_l_subcls=None, x_ul=None, target_ul=None,
@@ -534,9 +532,9 @@ class USRN(BaseModel):
         logits = self.classifier_dm(out_feat_parent)
 
         # sub class
-        subembedding_, omega_sub = self.DMlayer(feat_SubCls)
+        subembedding_, omega_sub = self.DMlayer_sub(feat_SubCls)
         subembedding = torch.exp(-subembedding_)
-        out_feat_sub = self.DMBN(subembedding)
+        out_feat_sub = self.DMBN_sub(subembedding)
         uncer_sub = self.get_uncer_sub(out_feat_sub)
         logits_SubCls = self.classifier_SubCls_dm(out_feat_sub)
 
