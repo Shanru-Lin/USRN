@@ -508,10 +508,10 @@ class USRN(BaseModel):
         # parent class
         logits = self.classifier(feat)
         # sub class
-        subembedding_, omega_sub = self.DMlayer(feat_SubCls)
+        subembedding_, omega_sub = self.DMlayer_sub(feat_SubCls)
         subembedding = torch.exp(-subembedding_)
-        out_feat_sub = self.DMBN(subembedding)
-        uncer_sub = self.get_uncer(out_feat_sub)
+        out_feat_sub = self.DMBN_sub(subembedding)
+        uncer_sub = self.get_uncer_sub(out_feat_sub)
         logits_SubCls = self.classifier_SubCls_dm(out_feat_sub)
         return logits, logits_SubCls, uncer_sub, omega_sub.squeeze(), subembedding_
         # logits = self.classifier(feat)
