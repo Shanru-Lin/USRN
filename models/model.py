@@ -190,11 +190,32 @@ class Baseline(BaseModel):
         self.layers = conf['layers']
         self.out_dim = conf['out_dim']
 
+        # {
+        self.loss_weight_uncer_relevent = conf['loss_weight_uncer_relevent']
+        self.loss_weight_dis_and_entro = conf['loss_weight_dis_and_entro']
+        self.nb_prototype = conf['nb_prototype']
+        self.num_features = conf['num_feature']
+        self.uncer_calc = conf['uncer_calc']
+        # }
+
         assert self.layers in [50, 101]
 
         if self.backbone == 'deeplab_v3+':
             self.encoder = DeepLab_v3p(backbone='resnet{}'.format(self.layers))
             self.classifier = nn.Sequential(nn.Dropout(0.1), nn.Conv2d(256, num_classes, kernel_size=1, stride=1))
+            #{
+            if self.uncer_calc:
+                self.classifier_dm = nn.Sequential(nn.Dropout(0.1), nn.Conv2d(self.nb_prototype, num_classes, kernel_size=1, stride=1))
+                for m in self.classifier_dm.modules():
+                    if isinstance(m, nn.Conv2d):
+                        torch.nn.init.kaiming_normal_(m.weight)
+                    elif isinstance(m, nn.BatchNorm2d):
+                        m.weight.data.fill_(1)
+                        m.bias.data.zero_()
+                    elif isinstance(m, nn.SyncBatchNorm):
+                        m.weight.data.fill_(1)
+                        m.bias.data.zero_()
+            #}
             for m in self.classifier.modules():
                 if isinstance(m, nn.Conv2d):
                     torch.nn.init.kaiming_normal_(m.weight)
@@ -209,6 +230,17 @@ class Baseline(BaseModel):
             self.classifier = nn.Conv2d(self.out_dim, num_classes, kernel_size=1, stride=1)
         else:
             raise ValueError("No such backbone {}".format(self.backbone))
+        #{
+        self.total_loss = 0
+        self.curr_losses = {}
+
+        if self.uncer_calc:
+            self.conv1x1 = nn.Conv2d(256, self.num_features, kernel_size=1, stride=1, padding=0)
+            self.DMlayer = Distanceminimi_Layer_learned(in_features=self.num_features, out_features=self.nb_prototype,
+                                                        dist='cos')
+            self.DMBN = nn.BatchNorm2d(self.nb_prototype)
+            self.get_uncer = nn.Conv2d(self.nb_prototype, self.num_classes, 1)
+        #}
 
     def forward(self, x_l=None, target_l=None, x_ul=None, target_ul=None, curr_iter=None, epoch=None, gpu=None,
                 gt_l=None, ul1=None, br1=None, \
@@ -220,20 +252,57 @@ class Baseline(BaseModel):
 
         if self.mode == 'supervised':
             feat = self.encoder(x_l)
-            enc = self.classifier(feat)
-            output_l = F.interpolate(enc, size=x_l.size()[2:], mode='bilinear', align_corners=True)
-
+    #{
+            # enc = self.classifier(feat)
+            logits_l, uncer, omega, embedding_ = self.get_logits_and_uncer(feat)
+            
+            # output_l = F.interpolate(enc, size=x_l.size()[2:], mode='bilinear', align_corners=True)
+            output_l = F.interpolate(logits_l, size=x_l.size()[2:], mode='bilinear', align_corners=True)
+            
             loss_sup = self.sup_loss(output_l, target_l, ignore_index=self.ignore_index,
                                      temperature=1.0) * self.sup_loss_w
-
-            curr_losses = {'Ls': loss_sup}
+  
+            self.curr_losses = {'Ls': loss_sup}
             outputs = {'sup_pred': output_l}
-            total_loss = loss_sup
+            self.total_loss = loss_sup
+            #return total_loss, curr_losses, outputs
+            
+            self.curr_losses['L_task'] = self.total_loss
 
-            return total_loss, curr_losses, outputs
+            if self.uncer_calc:
+                self.curr_losses['L_uncertainty'] = self.uncertainty_loss(uncer, logits_l, target_l, self.num_classes)
+                self.curr_losses['L_dissimilar'] = self.dissimilar_loss(omega)
+                self.curr_losses['L_entropy'] = self.entropy_loss(embedding_)
+                self.total_loss = self.total_loss +  self.loss_weight_parent_uncer_relevent * (self.loss_weight_uncer_relevent * (self.curr_losses['L_uncertainty'] + self.loss_weight_dis_and_entro * (self.curr_losses['L_dissimilar'] + self.curr_losses['L_entropy'])))
+            return self.total_loss, self.curr_losses, outputs       
+            
         else:
             raise ValueError("No such mode {}".format(self.mode))
     
+    def get_logits_and_uncer(self, feat): 
+        embedding_, omega = self.DMlayer_parent(feat)
+        embedding = torch.exp(-embedding_)
+        out_feat = self.DMBN_parent(embedding)
+        uncer = self.get_uncer_parent(out_feat)
+        logits = self.classifier_dm(out_feat)
+        return logits, uncer, omega.squeeze(), embedding_
+
+    def uncertainty_loss(self, uncer, outputs, pseudo_gt, class_num):
+        abs_error = abs(outputs.detach() - pseudo_gt)
+        abs_error = abs_error.detach()
+        loss = nn.CrossEntropyLoss(reduction='mean')(uncer, abs_error) / class_num
+        return loss
+
+    def entropy_loss(self, embedding):
+        embedding = nn.Softmax(dim=1)(embedding)
+        minus_entropy = embedding * torch.log(embedding)
+        minus_entropy = torch.sum(minus_entropy, dim=1)
+        return minus_entropy.mean()
+
+    def dissimilar_loss(self, protos):
+        loss = -1 * torch.mean(torch.cdist(protos, protos))
+        return loss
+    #}
     def concat_all_gather(self, tensor):
         """
         Performs all_gather operation on the provided tensors.

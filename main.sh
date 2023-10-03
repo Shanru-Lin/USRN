@@ -19,4 +19,4 @@ python3 main.py --config configs/${data}_usrn.json
 
 
 # testing usrn:
-# python3 main.py --test True --resume saved/voc_1over32_usrn/best_model.pth --config configs/test.json
+# python3 main.py --test True --resume saved/voc_1over32_usrn_parent/best_model.pth --config configs/test.json

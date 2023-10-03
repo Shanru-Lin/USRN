@@ -16,27 +16,41 @@
     "pretrained": true,
     "random_seed": 42,
 
-    "model":{
-        "loss_weight_subcls": 1.0,
-        "loss_weight_unsup": 1.0,
-        "loss_weight_uncer_relevent": 0.15,
-        "loss_weight_dis_and_entro": 1.0,
-        "num_feature": 256,
-        "nb_prototype": 400,
-        "parent_uncer_calc": true,
-        "loss_weight_parent_uncer_relevent": 1.0,
-        "supervised": false,
-        "semi": true,
-        "epoch_start_unsup": 0,
-        "supervised_w": 1,
-        "sup_loss": "CE",
-        "layers": 50,
-        "downsample": true,
-        "out_dim": 256,
+    "model": {
+        "MEAN": [
+            0.485,
+            0.456,
+            0.406
+        ],
+        "STD": [
+            0.229,
+            0.224,
+            0.225
+        ],
         "backbone": "deeplab_v3+",
+        "downsample": true,
+        "epoch_start_unsup": 0,
+        "layers": 50,
+        "loss_weight_dis_and_entro": 1.0,
+        "loss_weight_parent_uncer_relevent": 1.0,
+        "loss_weight_subcls": 1.0,
+        "loss_weight_uncer_relevent": 0.15,
+        "loss_weight_unsup": 1.0,
+        "n_labeled_examples": 331,
+        "nb_prototype_parent": 60,
+        "nb_prototype_sub": 380,
+        "num_feature_parent": 256,
+        "num_feature_sub": 256,
+        "out_dim": 256,
+        "parent_uncer_calc": true,
         "pos_thresh_value": 0.75,
+        "semi": true,
         "step_save": 1,
-        "stride": 8
+        "stride": 8,
+        "sub_uncer_calc": true,
+        "sup_loss": "CE",
+        "supervised": false,
+        "supervised_w": 1
     },
 
     "optimizer": {
