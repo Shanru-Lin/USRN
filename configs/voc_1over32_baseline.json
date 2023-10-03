@@ -1,8 +1,8 @@
 {
     "name": "Baseline",
-    "experim_name": "voc_1over32_baseline",
+    "experim_name": "voc_1over32_baseline_proto64",
     "n_labeled_examples": 331,
-    "n_gpu": 1,
+    "n_gpu": 2,
     "num_images_all": 10582,
     "dataset": "voc",
     "data_dir": "./datasets/voc",
@@ -16,6 +16,11 @@
     "random_seed": 42,
 
     "model":{
+        "uncer_calc": true,
+        "loss_weight_uncer_relevent": 0.1,
+        "loss_weight_dis_and_entro": 1.0,
+        "num_feature": 256,
+        "nb_prototype": 64,
         "supervised": true,
         "semi": false,
         "epoch_start_unsup": 0,
@@ -69,7 +74,7 @@
     },
 
     "val_loader": {
-        "batch_size": 1,
+        "batch_size": 2,
         "val": true,
         "split": "val",
         "shuffle": false,

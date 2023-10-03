@@ -202,10 +202,10 @@ class Baseline(BaseModel):
 
         if self.backbone == 'deeplab_v3+':
             self.encoder = DeepLab_v3p(backbone='resnet{}'.format(self.layers))
-            self.classifier = nn.Sequential(nn.Dropout(0.1), nn.Conv2d(256, num_classes, kernel_size=1, stride=1))
+            self.classifier = nn.Sequential(nn.Dropout(0.1), nn.Conv2d(256, self.num_classes, kernel_size=1, stride=1))
             #{
             if self.uncer_calc:
-                self.classifier_dm = nn.Sequential(nn.Dropout(0.1), nn.Conv2d(self.nb_prototype, num_classes, kernel_size=1, stride=1))
+                self.classifier_dm = nn.Sequential(nn.Dropout(0.1), nn.Conv2d(self.nb_prototype, self.num_classes, kernel_size=1, stride=1))
                 for m in self.classifier_dm.modules():
                     if isinstance(m, nn.Conv2d):
                         torch.nn.init.kaiming_normal_(m.weight)
@@ -253,23 +253,22 @@ class Baseline(BaseModel):
         if self.mode == 'supervised':
             feat = self.encoder(x_l)
     #{
-            # enc = self.classifier(feat)
-            logits_l, uncer, omega, embedding_ = self.get_logits_and_uncer(feat)
-            
-            # output_l = F.interpolate(enc, size=x_l.size()[2:], mode='bilinear', align_corners=True)
-            output_l = F.interpolate(logits_l, size=x_l.size()[2:], mode='bilinear', align_corners=True)
-            
+            if self.uncer_calc:
+                logits_l, uncer, omega, embedding_ = self.get_logits_and_uncer(feat)
+                output_l = F.interpolate(logits_l, size=x_l.size()[2:], mode='bilinear', align_corners=True)
+            else:
+                enc = self.classifier(feat)
+                output_l = F.interpolate(enc, size=x_l.size()[2:], mode='bilinear', align_corners=True)
+    
             loss_sup = self.sup_loss(output_l, target_l, ignore_index=self.ignore_index,
                                      temperature=1.0) * self.sup_loss_w
   
             self.curr_losses = {'Ls': loss_sup}
             outputs = {'sup_pred': output_l}
             self.total_loss = loss_sup
-            #return total_loss, curr_losses, outputs
             
-            self.curr_losses['L_task'] = self.total_loss
-
             if self.uncer_calc:
+                self.curr_losses['L_task'] = self.total_loss
                 self.curr_losses['L_uncertainty'] = self.uncertainty_loss(uncer, logits_l, target_l, self.num_classes)
                 self.curr_losses['L_dissimilar'] = self.dissimilar_loss(omega)
                 self.curr_losses['L_entropy'] = self.entropy_loss(embedding_)
@@ -280,10 +279,10 @@ class Baseline(BaseModel):
             raise ValueError("No such mode {}".format(self.mode))
     
     def get_logits_and_uncer(self, feat): 
-        embedding_, omega = self.DMlayer_parent(feat)
+        embedding_, omega = self.DMlayer(feat)
         embedding = torch.exp(-embedding_)
-        out_feat = self.DMBN_parent(embedding)
-        uncer = self.get_uncer_parent(out_feat)
+        out_feat = self.DMBN(embedding)
+        uncer = self.get_uncer(out_feat)
         logits = self.classifier_dm(out_feat)
         return logits, uncer, omega.squeeze(), embedding_
 

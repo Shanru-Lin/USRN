@@ -36,7 +36,7 @@ def main(gpu, ngpus_per_node, config, resume, test, save_feature):
     else:
         train_logger = None
 
-    os.environ['CUDA_VISIBLE_DEVICES'] = '4,5,6,7'
+    os.environ['CUDA_VISIBLE_DEVICES'] = '6,7'
 
     config['rank'] = gpu + ngpus_per_node * config['n_node']
 

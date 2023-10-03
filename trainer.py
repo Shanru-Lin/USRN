@@ -498,6 +498,7 @@ class Trainer_Baseline(BaseTrainer):
         self.start_time = time.time()
 
         self.epoch_start_unsup = config['model']['epoch_start_unsup']
+        self.uncer_calc = config['model']['uncer_calc']
 
     def _train_epoch(self, epoch):
         if self.gpu == 0:
@@ -549,11 +550,20 @@ class Trainer_Baseline(BaseTrainer):
             if self.gpu == 0:
                 if batch_idx % 100 == 0:
                     if self.mode == 'supervised':
-                        self.logger.info("epoch:{}, L={:.3f}, Ls={:.3f}".
+                        if self.uncer_calc: 
+                            self.logger.info("epoch:{}, L={:.3f}, L_task={:.3f}, Ls={:.3f}, L_uncertainty={:.3f}, L_dissimilar={:.3f}, L_entropy={:.3f}".
+                                         format(epoch, total_loss, cur_losses['L_task'], cur_losses['Ls'], cur_losses['L_uncertainty'], cur_losses['L_dissimilar'], cur_losses['L_entropy']))
+                        else:
+                            self.logger.info("epoch:{}, L={:.3f}, Ls={:.3f}".
                                          format(epoch, total_loss, cur_losses['Ls']))
+             
                     else:
                         if epoch-1 < self.epoch_start_unsup:
-                            self.logger.info("epoch:{}, L={:.3f}, Ls={:.3f}".
+                            if self.uncer_calc: 
+                                self.logger.info("epoch:{}, L={:.3f}, L_task={:.3f}, Ls={:.3f}, L_uncertainty={:.3f}, L_dissimilar={:.3f}, L_entropy={:.3f}".
+                                         format(epoch, total_loss, cur_losses['L_task'], cur_losses['Ls'], cur_losses['L_uncertainty'], cur_losses['L_dissimilar'], cur_losses['L_entropy']))
+                            else:
+                                self.logger.info("epoch:{}, L={:.3f}, Ls={:.3f}".
                                              format(epoch, total_loss, cur_losses['Ls']))
                         else:
                             self.logger.info("epoch:{}, L={:.3f}, Ls={:.3f}, Lu={:.3f}, mIoU_l={:.2f}, ul={:.2f}".
@@ -645,10 +655,14 @@ class Trainer_Baseline(BaseTrainer):
 
                 # METRICS TO TENSORBOARD
                 self.wrt_step = (epoch) * len(self.val_loader)
-                self.writer.add_scalar(f'{self.wrt_mode}/loss', total_loss_val.average, self.wrt_step)
+                #{
+                # self.writer.add_scalar(f'{self.wrt_mode}/loss', total_loss_val.average, self.wrt_step)
+                # for k, v in list(seg_metrics.items())[:-1]:
+                #     self.writer.add_scalar(f'{self.wrt_mode}/{k}', v, self.wrt_step)
+                self.writer.add_scalar(f'{self.wrt_mode}/loss', total_loss_val.average, epoch)
                 for k, v in list(seg_metrics.items())[:-1]:
-                    self.writer.add_scalar(f'{self.wrt_mode}/{k}', v, self.wrt_step)
-
+                    self.writer.add_scalar(f'{self.wrt_mode}/{k}', v, epoch)
+                #}
             log = {
                 'val_loss': total_loss_val.average,
                 **seg_metrics
@@ -657,8 +671,13 @@ class Trainer_Baseline(BaseTrainer):
         return log
 
     def _reset_metrics(self):
-        self.loss_sup = AverageMeter()
-        self.loss_unsup = AverageMeter()
+        self.L_task = AverageMeter()
+        self.L_uncertainty = AverageMeter()
+        self.L_dissimilar = AverageMeter()
+        self.L_entropy = AverageMeter()
+
+        self.Ls = AverageMeter()
+        self.Lu = AverageMeter()
         self.loss_weakly = AverageMeter()
         self.pair_wise = AverageMeter()
         self.total_inter_l, self.total_union_l = 0, 0
@@ -725,6 +744,12 @@ class Trainer_Baseline(BaseTrainer):
 
     def _log_values(self, cur_losses):
         logs = {}
+        if "L_uncertainty" in cur_losses.keys():
+            logs['L_uncertainty_sub'] = self.L_uncertainty.average
+        if "L_dissimilar_sub" in cur_losses.keys():
+            logs['L_dissimilar'] = self.L_dissimilar.average
+        if "L_entropy_sub" in cur_losses.keys():
+            logs['L_entropy'] = self.L_entropy.average
         if "Ls" in cur_losses.keys():
             logs['Ls'] = self.Ls.average
         if "Lu" in cur_losses.keys():
@@ -739,11 +764,18 @@ class Trainer_Baseline(BaseTrainer):
             logs['mIoU_ul'] = self.mIoU_ul
         return logs
 
-    def _write_scalars_tb(self, logs):
+    #{
+    def _write_scalars_tb(self, logs, epoch): 
+    # def _write_scalars_tb(self, logs): 
+        # for k, v in logs.items():
+        #     if 'class_iou' not in k: self.writer.add_scalar(f'train/{k}', v, self.wrt_step)
+        # for i, opt_group in enumerate(self.optimizer.param_groups):
+        #     self.writer.add_scalar(f'train/Learning_rate_{i}', opt_group['lr'], self.wrt_step)
         for k, v in logs.items():
-            if 'class_iou' not in k: self.writer.add_scalar(f'train/{k}', v, self.wrt_step)
+            if 'class_iou' not in k: self.writer.add_scalar(f'train/{k}', v, epoch)
         for i, opt_group in enumerate(self.optimizer.param_groups):
-            self.writer.add_scalar(f'train/Learning_rate_{i}', opt_group['lr'], self.wrt_step)
+            self.writer.add_scalar(f'train/Learning_rate_{i}', opt_group['lr'], epoch)
+    #}
 
     def _add_img_tb(self, val_visual, wrt_mode):
         val_img = []
